@@ -1,0 +1,23 @@
+{
+    "config": {
+      "abort": {
+        "already_configured": "Gerät ist bereits konfiguriert"
+      },
+      "error": {
+        "cannot_connect": "Verbindung fehlgeschlagen",
+        "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse",
+        "unknown": "Unerwarteter Fehler"
+      },
+      "step": {
+        "user": {
+          "title": "Konfiguration der Verbindung zum Wechselrichter",
+          "data": {
+            "name": "Prefix für alle Parameterwerte (nach Belieben zu ändern)",
+            "maxstorage_host": "Host (IP-Adresse oder Hostname)",
+            "maxstorage_user": "Benutzername für die Weboberfläche (Default: user)",
+            "maxstorage_password": "Passwort für die Weboberfläche (Default: solarmax.com)"
+          }
+        }
+      }
+    }
+  }

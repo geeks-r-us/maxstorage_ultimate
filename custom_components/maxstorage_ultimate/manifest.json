@@ -1,0 +1,9 @@
+{
+    "domain": "maxstorage_ultimate",
+    "name": "MaxStorage Ultimate",
+    "codeowners": ["@geeks-r-us"],
+    "requirements": ["requests"],
+    "config_flow": true,
+    "integration_type": "hub",
+    "version": "0.0.1"
+}
