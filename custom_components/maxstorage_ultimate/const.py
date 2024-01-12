@@ -1,4 +1,4 @@
-DOMAIN = "maxstorage"
+DOMAIN = "maxstorage_ultimate"
 
 DEFAULT_USER = "user"
 DEFAULT_PASSWORD = "solarmax.com"

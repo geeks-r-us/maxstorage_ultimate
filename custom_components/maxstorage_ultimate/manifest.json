@@ -2,7 +2,8 @@
     "domain": "maxstorage_ultimate",
     "name": "MaxStorage Ultimate",
     "codeowners": ["@geeks-r-us"],
-    "requirements": ["requests"],
+    "requirements": ["aiohttp", "zeroconf"],
+    "zeroconf": ["_maxstorage-ultimate._tcp.local."],
     "config_flow": true,
     "integration_type": "hub",
     "version": "0.0.1"

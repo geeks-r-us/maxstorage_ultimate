@@ -19,7 +19,7 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
         update_interval = timedelta(minutes=0.1)  # Set your desired update interval
 
         super().__init__(
-            hass, _LOGGER, name="MaxStorage", update_interval=update_interval
+            hass, _LOGGER, name="MaxStorageUltimate", update_interval=update_interval
         )
 
     async def _async_update_data(self):

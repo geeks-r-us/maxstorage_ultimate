@@ -4,9 +4,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 
+from .client import MaxStorageClient
 from .const import CONF_STORAGE_HOST, CONF_STORAGE_PASSWORD, CONF_STORAGE_USER, DOMAIN
 from .coordinator import MaxStorageDataUpdateCoordinator
-from .max_storage import MaxStorageClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
 
-    # Store the coordinator for use by your entities
+    # Store the coordinator for use by entities
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator, "client": client}
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

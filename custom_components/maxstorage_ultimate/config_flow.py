@@ -124,6 +124,32 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_zeroconf(self, discovery_info):
+        """Handle a discovered MaxStorage device via zeroconf."""
+        _LOGGER.debug("Discovered MaxStorage device: %s", discovery_info)
+
+        # Extract relevant information
+        properties = discovery_info.properties
+        artno = properties.get("artno")
+        serial = properties.get("serial")
+        vpn = properties.get("vpn")
+
+        # You might want to check the service type as well to ensure it matches your device
+        service_type = discovery_info.get("type")
+        if service_type != "_maxstorage._tcp.local.":
+            return self.async_abort(reason="not_maxstorage_device")
+
+        await self.async_set_unique_id(serial)
+        self._abort_if_unique_id_configured()
+
+        # Here, the serial number is used to set a unique ID for each device
+        # You can then use this unique ID to avoid creating duplicate entries for the same device
+        return self.async_show_form(
+            step_id="user",
+            data_schema=step_user_data_schema(),
+            description_placeholders={"artno": artno, "serial": serial, "vpn": vpn},
+        )
+
 
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""
