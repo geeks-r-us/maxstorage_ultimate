@@ -47,21 +47,23 @@ class MaxStorageClient:
         """Make a POST request to the data endpoint using the session with the 'getFullSwarmLiveDataJSON' parameter."""
         if not self.is_token_valid():
             await self.authenticate()
-
-        async with self.session.post(
-            self.data_url, data={"getFullSwarmLiveDataJSON": 1}
-        ) as response:
-            if response.status == 200:
-                try:
-                    return await response.json(content_type=None)
-                except ValueError as e:
-                    raise ValueError(
-                        f"Response not in JSON format: {response.text}"
-                    ) from e
-            else:
-                raise HTTPError(
-                    f"Failed to fetch data with status code {response.status}: {response.text}"
-                )
+        try:
+            async with self.session.post(
+                self.data_url, data={"getFullSwarmLiveDataJSON": 1}
+            ) as response:
+                if response.status == 200:
+                    try:
+                        return await response.json(content_type=None)
+                    except ValueError as e:
+                        raise ValueError(
+                            f"Response not in JSON format: {response.text}"
+                        ) from e
+                else:
+                    raise HTTPError(
+                        f"Failed to fetch data with status code {response.status}: {response.text}"
+                    )
+        except aiohttp.ClientConnectorError as e:
+            raise InvalidHostError(f"Invalid host: {self.data_url}") from e
 
     async def close(self):
         """Close the aiohttp session."""
@@ -70,6 +72,10 @@ class MaxStorageClient:
 
 class AuthenticationFailedError(Exception):
     """Exception raised when authentication fails."""
+
+
+class InvalidHostError(Exception):
+    """Exception raised when the host is invalid."""
 
 
 class HTTPError(Exception):
