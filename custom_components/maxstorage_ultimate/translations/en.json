@@ -1,21 +1,31 @@
 {
     "config": {
       "abort": {
-        "already_configured": "Device is already configured"
+        "already_configured": "Device is already configured",
+        "already_in_progress": "Configuration flow is already in progress",
+        "ignore_ip6_link_local": "IPv6 link local address is not supported."
       },
       "error": {
         "cannot_connect": "Failed to connect",
         "invalid_host": "Invalid hostname or IP address",
         "unknown": "Unexpected error"
       },
+      "flow_title": "{name}",
       "step": {
+        "confirm": {
+          "title": "Set up Max.Storage Ultimate",
+          "data": {
+            "maxstorage_user": "Username (default: user)",
+            "maxstorage_password": "Password (default: solarmax.com)"
+          }
+        },
         "user": {
-          "title": "Inverter connection configuration",
+          "title": "Set up Max.Storage Ultimate",
           "data": {
             "name": "This name will be prefixed to all parameter values (change as you like)",
             "maxstorage_host": "Host (ip or hostname)",
-            "maxstorage_user": "Username for the web interface(default: user)",
-            "maxstorage_password": "Password for the web interface(default: solarmax.com)"
+            "maxstorage_user": "Username (default: user)",
+            "maxstorage_password": "Password (default: solarmax.com)"
           }
         }
       }
