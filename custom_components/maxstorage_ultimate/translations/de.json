@@ -1,23 +1,56 @@
 {
-    "config": {
-      "abort": {
-        "already_configured": "Gerät ist bereits konfiguriert"
+  "config": {
+    "abort": {
+      "already_configured": "Gerät ist bereits konfiguriert"
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "flow_title": "{name}",
+    "step": {
+      "confirm": {
+        "title": "Einrichtung Max.Storage Ultimate",
+        "data": {
+          "maxstorage_user": "Username (default: user)",
+          "maxstorage_password": "Password (default: solarmax.com)"
+        }
       },
-      "error": {
-        "cannot_connect": "Verbindung fehlgeschlagen",
-        "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse",
-        "unknown": "Unerwarteter Fehler"
-      },
-      "step": {
-        "user": {
-          "title": "Konfiguration der Verbindung zum Wechselrichter",
-          "data": {
-            "name": "Prefix für alle Parameterwerte (nach Belieben zu ändern)",
-            "maxstorage_host": "Host (IP-Adresse oder Hostname)",
-            "maxstorage_user": "Benutzername für die Weboberfläche (Default: user)",
-            "maxstorage_password": "Passwort für die Weboberfläche (Default: solarmax.com)"
-          }
+      "user": {
+        "title": "Konfiguration der Verbindung zum Wechselrichter",
+        "data": {
+          "name": "Prefix für alle Parameterwerte (nach Belieben zu ändern)",
+          "maxstorage_host": "Host (IP-Adresse oder Hostname)",
+          "maxstorage_user": "Benutzername für die Weboberfläche (Default: user)",
+          "maxstorage_password": "Passwort für die Weboberfläche (Default: solarmax.com)"
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "batterySoC": {
+        "name": "Batterie SoC"
+      },
+      "batteryCapacity": {
+        "name": "Batterie Kapazität"
+      },
+      "batteryPower": {
+        "name": "Batterie Leistung"
+      },
+      "gridPower": {
+        "name": "Netzleistung"
+      },
+      "usagePower": {
+        "name": "Energieverbrauch"
+      },
+      "plantPower": {
+        "name": "PV-Leistung"
+      },
+      "storageDCPower": {
+        "name": "Speicher DC Leistung"
+      }
+    }
   }
+}

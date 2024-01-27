@@ -1,20 +1,26 @@
-from __future__ import annotations
-
+"""Platform for MaxStorage Ultimate binary sensor integration."""
+from collections.abc import Callable
+from dataclasses import dataclass
 import logging
+from typing import Any
 
+from config.custom_components.maxstorage_ultimate.coordinator import (
+    MaxStorageDataUpdateCoordinator,
+)
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
+    BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
 
-from .const import DOMAIN, SENSOR_PREFIX
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,77 +33,76 @@ async def async_setup_entry(
 
     coordinator = hass.data[DOMAIN][config.entry_id]["coordinator"]
 
-    sensors = []
+    sensors: list[BinarySensorEntity] = []
     relais_data = coordinator.data.get("Relais", {})
     names = relais_data.get("name", [])
 
     for index, name in enumerate(names):
         if name:  # Only add sensors for relays with a name
-            sensor = RelaisSensor(coordinator, f"Relais {name}", index)
+            description = MaxStorageBinarySensorDescription(
+                key="relais_{name}",
+                icon="mdi:power-plug",
+                device_class=BinarySensorDeviceClass.POWER,
+                value_fn=lambda data, idx=index: bool(
+                    data.get("Relais", {}).get("value", [])[idx]
+                ),
+                name=name,
+            )
+
+            sensor = MaxStorageBinarySensor(coordinator, description)
             sensors.append(sensor)
 
     async_add_entities(sensors)
 
 
-class BaseSensor(CoordinatorEntity, BinarySensorEntity):
-    """Base class for binary sensors."""
+@dataclass(frozen=True)
+class MaxStorageBinarySensorDescriptionMixin:
+    """Mixin for sensor descriptions."""
 
-    def __init__(self, coordinator: DataUpdateCoordinator, sensor_type: str) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._sensor_type = sensor_type
-        self._name = f"{SENSOR_PREFIX} {sensor_type}"
-        self._state = None
-        self._icon = None
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return self._name
-
-    @property
-    def unique_id(self):
-        """Return the unique ID for this sensor."""
-        return f"{SENSOR_PREFIX}_{self._sensor_type}"
-
-    @property
-    def icon(self):
-        """Return the icon."""
-        return self._icon
-
-    @property
-    def is_on(self):
-        """Return true if the binary sensor is on."""
-        return self._state
-
-    @property
-    def device_class(self):
-        """Return the device class."""
-        return self._device_class
-
-    @property
-    def available(self):
-        """Return True if entity is available."""
-        return self.coordinator.last_update_success
+    value_fn: Callable[[dict[str, Any]], str | int | float | None]
 
 
-class RelaisSensor(BaseSensor):
-    """Relais sensor class."""
+@dataclass(frozen=True)
+class MaxStorageBinarySensorDescription(
+    BinarySensorEntityDescription, MaxStorageBinarySensorDescriptionMixin
+):
+    """Describes MaxStorage sensor entity."""
+
+    attr_fn: Callable[[dict[str, Any]], dict[str, Any]] = lambda _: {}
+
+
+class MaxStorageBinarySensor(
+    CoordinatorEntity[MaxStorageDataUpdateCoordinator], BinarySensorEntity
+):
+    """Representation of MaxStorage binary sensors."""
+
+    _attr_has_entity_name = True
+    entity_description: MaxStorageBinarySensorDescription
 
     def __init__(
-        self, coordinator: DataUpdateCoordinator, sensor_type: str, index: int
+        self,
+        coordinator: MaxStorageDataUpdateCoordinator,
+        description: MaxStorageBinarySensorDescription,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, sensor_type)
-        self._device_class = BinarySensorDeviceClass.POWER
-        self._icon = "mdi:power-plug"
-        self._index = index
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = (
+            f"{coordinator.api.device_info['Ident']}_{description.name}"
+        )
+        self._attr_device_info = coordinator.device_info
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the state attributes of the sensor."""
+        return self.entity_description.attr_fn(self.coordinator.data)
 
     @property
     def is_on(self):
         """Return true if the binary sensor is on."""
-        relais_data = self.coordinator.data.get("Relais", {})
-        values = relais_data.get("value", [])
-        if len(values) > self._index:
-            return bool(values[self._index])
-        return False
+        return self.entity_description.value_fn(self.coordinator.data)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()

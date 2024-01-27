@@ -17,19 +17,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up MaxStorage Collector from a config entry."""
     _LOGGER.debug("__init__.py:async_setup_entry(%s)", entry.as_dict())
 
-    client = MaxStorageClient(
-        entry.data[CONF_STORAGE_HOST],
-        entry.data[CONF_STORAGE_USER],
-        entry.data[CONF_STORAGE_PASSWORD],
-    )
-    coordinator = MaxStorageDataUpdateCoordinator(hass, client)
+    client = None
+    coordinator = None
+
+    if hass.data.get(DOMAIN) is None:
+        hass.data[DOMAIN] = {}
+
+    if hass.data[DOMAIN].get(entry.entry_id) is None:
+        client = MaxStorageClient(
+            entry.data[CONF_STORAGE_HOST],
+            entry.data[CONF_STORAGE_USER],
+            entry.data[CONF_STORAGE_PASSWORD],
+        )
+
+        coordinator = MaxStorageDataUpdateCoordinator(hass, client)
+        hass.data[DOMAIN][entry.entry_id] = {
+            "coordinator": coordinator,
+            "client": client,
+        }
+    else:
+        coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+        client = hass.data[DOMAIN][entry.entry_id]["client"]
 
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
 
-    # Store the coordinator for use by entities
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator, "client": client}
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.async_on_unload(entry.add_update_listener(update_listener))

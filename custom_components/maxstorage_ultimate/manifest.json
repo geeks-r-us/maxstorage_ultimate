@@ -2,7 +2,7 @@
     "domain": "maxstorage_ultimate",
     "name": "Max.Storage Ultimate",
     "codeowners": ["@geeks-r-us"],
-    "requirements": ["aiohttp", "zeroconf"],
+    "requirements": ["aiohttp", "zeroconf", "beautifulsoup4"],
     "zeroconf": ["_maxstorage._tcp.local."],
     "config_flow": true,
     "integration_type": "hub",

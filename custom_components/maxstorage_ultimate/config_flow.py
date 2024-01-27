@@ -16,6 +16,7 @@ from homeassistant.exceptions import HomeAssistantError
 from .client import AuthenticationFailedError, InvalidHostError, MaxStorageClient
 from .const import (
     CONF_STORAGE_HOST,
+    CONF_STORAGE_NAME,
     CONF_STORAGE_PASSWORD,
     CONF_STORAGE_USER,
     CONF_STORAGE_VPN,
@@ -43,6 +44,7 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         self._name: str | None = None
         self._user: str = ""
         self._password: str = ""
+        self._unique_id: str | None = None
 
     async def maxstorage_ultimate_init(self) -> str | None:
         """Initialize MaxStorage Ultimate."""
@@ -51,6 +53,7 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         try:
             client = MaxStorageClient(self._host, self._user, self._password)
             await client.get_data()
+            await self.async_set_unique_id(client.get_device_info()["Ident"])
             await client.close()
         except AuthenticationFailedError:
             return ERROR_AUTH_INVALID
@@ -65,16 +68,20 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_check_configured_entry(self) -> ConfigEntry | None:
         """Check if entry is configured."""
         assert self._host
-        current_host = await self.hass.async_add_executor_job(
-            socket.gethostbyname, self._host
-        )
-
-        for entry in self._async_current_entries(include_ignore=False):
-            entry_host = await self.hass.async_add_executor_job(
-                socket.gethostbyname, entry.data[CONF_STORAGE_HOST]
+        try:
+            current_host = await self.hass.async_add_executor_job(
+                socket.gethostbyname, self._host
             )
-            if entry_host == current_host:
-                return entry
+
+            for entry in self._async_current_entries(include_ignore=False):
+                entry_host = await self.hass.async_add_executor_job(
+                    socket.gethostbyname, entry.data[CONF_STORAGE_HOST]
+                )
+                if entry_host == current_host:
+                    return entry
+        except socket.gaierror:
+            pass
+
         return None
 
     @callback
@@ -83,6 +90,7 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title=self._name,
             data={
+                CONF_NAME: self._name,
                 CONF_STORAGE_HOST: self._host,
                 CONF_STORAGE_USER: self._user,
                 CONF_STORAGE_PASSWORD: self._password,
@@ -99,8 +107,6 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
 
         if user_input is None:
             return self._show_setup_form_init()
-
-        errors = {}
 
         self._name = user_input[CONF_NAME]
         self._host = user_input[CONF_STORAGE_HOST]
@@ -127,9 +133,9 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         self._name = discovery_info.name.replace("._maxstorage._tcp.local.", "")
         self.context[CONF_STORAGE_HOST] = self._host
 
-        if uuid := discovery_info.name:
+        if uuid := discovery_info.hostname.split(".")[0]:
             await self.async_set_unique_id(uuid)
-            self._abort_if_unique_id_configured({CONF_STORAGE_HOST: self._host})
+            self._abort_if_unique_id_configured()
 
         for progress in self._async_in_progress():
             if progress.get("context", {}).get(CONF_STORAGE_HOST) == self._host:
@@ -160,16 +166,13 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return self._show_setup_form_confirm()
 
-        errors = {}
-
         self._user = user_input[CONF_STORAGE_USER]
         self._password = user_input[CONF_STORAGE_PASSWORD]
 
         error = await self.maxstorage_ultimate_init()
 
         if error:
-            errors["base"] = error
-            return self._show_setup_form_confirm(errors)
+            return self._show_setup_form_confirm({"base": error})
 
         return self._async_create_entry()
 
@@ -178,6 +181,7 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         _LOGGER.debug(
             "config_flow.py:MaxStorageFlowHandler._show_setup_form_init: %s", errors
         )
+
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(

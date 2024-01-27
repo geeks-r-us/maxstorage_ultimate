@@ -3,6 +3,7 @@
 import time
 
 import aiohttp
+from bs4 import BeautifulSoup
 
 
 class MaxStorageClient:
@@ -22,6 +23,7 @@ class MaxStorageClient:
         self.data_url = f"http://{base_url}/shared/energycontrolfunctions.php"
         self.username = username
         self.password = password
+        self.device_info = {}
         self.last_auth_time = None
         self.TOKEN_EXPIRY = 600  # 10 minutes
 
@@ -31,10 +33,30 @@ class MaxStorageClient:
         async with self.session.post(self.login_url, data=data) as response:
             if response.status == 200:
                 self.last_auth_time = time.time()
+                await self._read_device_info(response)
             else:
                 raise AuthenticationFailedError(
                     f"Authentication Failed with status code {response.status}: {response.text}"
                 )
+
+    async def _read_device_info(self, response: aiohttp.ClientResponse):
+        """Read the device info from the response."""
+
+        content = await response.text()
+        soup = BeautifulSoup(content, "html.parser")
+
+        elements = soup.find_all("p", style="white-space: normal;padding: 5px")
+        for element in elements:
+            entries = element.find_all("b")
+            for entry in entries:
+                if entry.next_sibling is not None:
+                    self.device_info[
+                        entry.text.strip().replace(":", "")
+                    ] = entry.next_sibling.strip()
+
+    def get_device_info(self):
+        """Return the device info."""
+        return self.device_info
 
     def is_token_valid(self):
         """Check if the token (session) is still valid."""

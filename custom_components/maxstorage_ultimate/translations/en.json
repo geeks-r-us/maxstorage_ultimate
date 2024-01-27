@@ -1,33 +1,58 @@
 {
-    "config": {
-      "abort": {
-        "already_configured": "Device is already configured",
-        "already_in_progress": "Configuration flow is already in progress",
-        "ignore_ip6_link_local": "IPv6 link local address is not supported."
+  "config": {
+    "abort": {
+      "already_configured": "Device is already configured",
+      "already_in_progress": "Configuration flow is already in progress",
+      "ignore_ip6_link_local": "IPv6 link local address is not supported."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_host": "Invalid hostname or IP address",
+      "unknown": "Unexpected error"
+    },
+    "flow_title": "{name}",
+    "step": {
+      "confirm": {
+        "title": "Set up Max.Storage Ultimate",
+        "data": {
+          "maxstorage_user": "Username (default: user)",
+          "maxstorage_password": "Password (default: solarmax.com)"
+        }
       },
-      "error": {
-        "cannot_connect": "Failed to connect",
-        "invalid_host": "Invalid hostname or IP address",
-        "unknown": "Unexpected error"
-      },
-      "flow_title": "{name}",
-      "step": {
-        "confirm": {
-          "title": "Set up Max.Storage Ultimate",
-          "data": {
-            "maxstorage_user": "Username (default: user)",
-            "maxstorage_password": "Password (default: solarmax.com)"
-          }
-        },
-        "user": {
-          "title": "Set up Max.Storage Ultimate",
-          "data": {
-            "name": "This name will be prefixed to all parameter values (change as you like)",
-            "maxstorage_host": "Host (ip or hostname)",
-            "maxstorage_user": "Username (default: user)",
-            "maxstorage_password": "Password (default: solarmax.com)"
-          }
+      "user": {
+        "title": "Set up Max.Storage Ultimate",
+        "data": {
+          "name": "This name will be prefixed to all parameter values (change as you like)",
+          "maxstorage_host": "Host (ip or hostname)",
+          "maxstorage_user": "Username (default: user)",
+          "maxstorage_password": "Password (default: solarmax.com)"
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "batterySoC": {
+        "name": "Battery ScC"
+      },
+      "batteryCapacity": {
+        "name": "Battery Capacity"
+      },
+      "batteryPower": {
+        "name": "Battery Power"
+      },
+      "gridPower": {
+        "name": "Grid Power"
+      },
+      "usagePower": {
+        "name": "Usage Power"
+      },
+      "plantPower": {
+        "name": "Plant Power"
+      },
+      "storageDCPower": {
+        "name": "Storage DC Power"
+      }
+    }
   }
+}
