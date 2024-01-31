@@ -1,9 +1,14 @@
 """Module provides a MaxStorageClient class for interacting with the MaxStorage web service."""
 
+import gzip
+import logging
 import time
+from urllib.parse import urlencode
 
 import aiohttp
 from bs4 import BeautifulSoup
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MaxStorageClient:
@@ -21,6 +26,7 @@ class MaxStorageClient:
         self.session = aiohttp.ClientSession(cookie_jar=cookie_jar)
         self.login_url = f"http://{base_url}/home.php"
         self.data_url = f"http://{base_url}/shared/energycontrolfunctions.php"
+        self.device_overview_url = f"http://{base_url}/shared/getDeviceData.php"
         self.username = username
         self.password = password
         self.device_info = {}
@@ -34,6 +40,7 @@ class MaxStorageClient:
             if response.status == 200:
                 self.last_auth_time = time.time()
                 await self._read_device_info(response)
+                await self._read_device_overview()
             else:
                 raise AuthenticationFailedError(
                     f"Authentication Failed with status code {response.status}: {response.text}"
@@ -53,6 +60,50 @@ class MaxStorageClient:
                     self.device_info[
                         entry.text.strip().replace(":", "")
                     ] = entry.next_sibling.strip()
+
+    async def _read_device_overview(
+        self,
+    ):
+        """Read the device overview from the response.""" ""
+
+        await self.session.post(
+            "http://192.168.178.43/device_overview.php"
+        )  # This is needed to set the session cookie?
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Referer": "http://192.168.178.43/device_overview.php",
+            "Origin": "http://192.168.178.43",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept-Encoding": "gzip, deflate",
+        }
+        data = "showActiveDeviceLiveData=true"
+
+        async with self.session.post(
+            self.device_overview_url,
+            data=data,
+            headers=headers,
+        ) as response:
+            _LOGGER.debug(f"Response Status: {response.status}")
+            _LOGGER.debug(f"Response Headers: {response.headers}")
+            if response.status == 200:
+                try:
+                    if response.headers.get("Content-Encoding") == "gzip":
+                        content = gzip.decompress(await response.read())
+                    else:
+                        content = await response.text()
+
+                    soup = BeautifulSoup(content, "html.parser")
+
+                except ValueError as e:
+                    raise ValueError(
+                        f"Response not in JSON format: {response.text}"
+                    ) from e
+            else:
+                raise HTTPError(
+                    f"Failed to fetch data with status code {response.status}: {response.text}"
+                )
 
     def get_device_info(self):
         """Return the device info."""
