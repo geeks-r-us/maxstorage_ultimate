@@ -3,7 +3,7 @@ from datetime import timedelta
 import logging
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .client import MaxStorageClient
@@ -18,9 +18,11 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, client: MaxStorageClient) -> None:
         """Initialize."""
         self.api = client
-        update_interval = timedelta(minutes=0.1)  # Set your desired update interval
         super().__init__(
-            hass, _LOGGER, name="MaxStorageUltimate", update_interval=update_interval
+            hass=hass,
+            logger=_LOGGER,
+            name=f"{DOMAIN}-{client.mac}-coordinator",
+            update_interval=timedelta(minutes=0.1),
         )
 
     async def _async_update_data(self):
@@ -33,9 +35,9 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Error communicating with API: {e}") from e
 
     @property
-    def device_info(self) -> DeviceInfo:
+    def device_info(self) -> dr.DeviceInfo:
         """Return the device information."""
-        return DeviceInfo(
+        di = dr.DeviceInfo(
             configuration_url=f"http://{self.api.device_info['Ident']}.local",
             identifiers={(DOMAIN, self.api.device_info["Ident"])},
             manufacturer="SolarMax",
@@ -45,3 +47,16 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
             sw_version=self.api.device_info["Firmware-Version"],
             hw_version=self.api.device_info["Hardware-Version"],
         )
+        if self.api.mac:
+            di["connections"] = {(dr.CONNECTION_NETWORK_MAC, self.api.mac)}
+        return di
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique ID."""
+        return self._unique_id
+
+    @property
+    def mac(self) -> str:
+        """Return the MAC address."""
+        return dr.format_mac(self._unique_id)

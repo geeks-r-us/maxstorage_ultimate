@@ -29,6 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.data[CONF_STORAGE_USER],
             entry.data[CONF_STORAGE_PASSWORD],
         )
+        await client.setup()
 
         coordinator = MaxStorageDataUpdateCoordinator(hass, client)
         hass.data[DOMAIN][entry.entry_id] = {

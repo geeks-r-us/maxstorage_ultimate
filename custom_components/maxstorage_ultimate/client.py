@@ -1,9 +1,15 @@
 """Module provides a MaxStorageClient class for interacting with the MaxStorage web service."""
-
+import logging
+import os
+import re
+import socket
+import subprocess
 import time
 
 import aiohttp
 from bs4 import BeautifulSoup
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MaxStorageClient:
@@ -19,13 +25,55 @@ class MaxStorageClient:
         """
         cookie_jar = aiohttp.CookieJar(unsafe=True)
         self.session = aiohttp.ClientSession(cookie_jar=cookie_jar)
+        self.base_url = base_url
         self.login_url = f"http://{base_url}/home.php"
         self.data_url = f"http://{base_url}/shared/energycontrolfunctions.php"
         self.username = username
         self.password = password
         self.device_info = {}
+        self.mac = None
         self.last_auth_time = None
         self.TOKEN_EXPIRY = 600  # 10 minutes
+
+    async def setup(self):
+        """Set up the client."""
+        ip = self.get_ip_address(self.base_url)
+        if ip is None:
+            raise InvalidHostError(f"Invalid host: {self.base_url}")
+        await self.authenticate()
+
+        self.mac = self.get_mac_address(ip)
+
+    def get_ip_address(self, host) -> str | None:
+        """Get the IP address of the host."""
+        try:
+            return socket.gethostbyname(host)
+        except socket.gaierror:
+            return None
+
+    def get_mac_address(self, ip_address):
+        """Get the MAC address of the host."""
+        if os.name == "nt":  # Windows
+            cmd = ["arp", "-a"]
+
+        else:  # Unix-based
+            cmd = ["arp", "-a", ip_address]
+
+        try:
+            output = subprocess.check_output(cmd, text=True)
+            # Use regex to find the MAC address
+            result = re.search(r"(" + re.escape(ip_address) + r")\s+([\w:]+)", output)
+            if result:
+                return result.group(2)  # MAC address
+            return None
+        except subprocess.CalledProcessError as ex:
+            _LOGGER.error("Error getting MAC address: %s", ex)
+            return None
+
+    async def ensure_authenticated(self):
+        """Ensure that the session is authenticated."""
+        if not self.is_token_valid():
+            await self.authenticate()
 
     async def authenticate(self):
         """Authenticate with the server. The session will handle the cookie."""
@@ -67,8 +115,7 @@ class MaxStorageClient:
 
     async def get_data(self):
         """Make a POST request to the data endpoint using the session with the 'getFullSwarmLiveDataJSON' parameter."""
-        if not self.is_token_valid():
-            await self.authenticate()
+        await self.ensure_authenticated()
         try:
             async with self.session.post(
                 self.data_url, data={"getFullSwarmLiveDataJSON": 1}
