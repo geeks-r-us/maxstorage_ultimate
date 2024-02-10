@@ -4,9 +4,6 @@ from dataclasses import dataclass
 import logging
 from typing import Any
 
-from config.custom_components.maxstorage_ultimate.coordinator import (
-    MaxStorageDataUpdateCoordinator,
-)
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -21,6 +18,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import DOMAIN
+from .coordinator import MaxStorageDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
