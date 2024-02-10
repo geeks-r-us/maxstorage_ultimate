@@ -53,6 +53,9 @@ class MaxStorageClient:
 
     def get_mac_address(self, ip_address):
         """Get the MAC address of the host."""
+
+        ping_cmd = ["ping", "-c", "1", ip_address]
+
         if os.name == "nt":  # Windows
             cmd = ["arp", "-a"]
 
@@ -60,11 +63,17 @@ class MaxStorageClient:
             cmd = ["arp", "-a", ip_address]
 
         try:
+            output = subprocess.check_output(
+                ping_cmd, text=True
+            )  # Ping the host to ensure it's in the ARP table
+            _LOGGER.debug(output)
             output = subprocess.check_output(cmd, text=True)
+            _LOGGER.debug(output)
             # Use regex to find the MAC address
-            result = re.search(r"(" + re.escape(ip_address) + r")\s+([\w:]+)", output)
+            result = re.search(r"([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})", output)
             if result:
-                return result.group(2)  # MAC address
+                _LOGGER.debug("Found MAC: %s", result.group())
+                return result.group()  # MAC address
             return None
         except subprocess.CalledProcessError as ex:
             _LOGGER.error("Error getting MAC address: %s", ex)
