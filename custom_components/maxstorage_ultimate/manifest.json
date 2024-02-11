@@ -6,5 +6,7 @@
     "zeroconf": ["_maxstorage._tcp.local."],
     "config_flow": true,
     "integration_type": "hub",
-    "version": "0.0.1"
+    "version": "0.0.1",
+    "issue_tracker": "https://github.com/geeks-r-us/maxstorage_ultimate/issues",
+    "documentation": "https://github.com/geeks-r-us/maxstorage_ultimate"
 }
