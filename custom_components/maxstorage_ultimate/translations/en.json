@@ -33,7 +33,7 @@
   "entity": {
     "sensor": {
       "batterySoC": {
-        "name": "Battery ScC"
+        "name": "Battery SoC"
       },
       "batteryCapacity": {
         "name": "Battery Capacity"
