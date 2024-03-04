@@ -2,12 +2,13 @@
     "domain": "maxstorage_ultimate",
     "name": "Max.Storage Ultimate",
     "codeowners": ["@geeks-r-us"],
-    "requirements": ["aiohttp", "zeroconf", "beautifulsoup4"],
-    "iot_class": "local_polling",
-    "zeroconf": ["_maxstorage._tcp.local."],
     "config_flow": true,
+    "documentation": "https://github.com/geeks-r-us/maxstorage_ultimate",
+    "requirements": ["aiohttp", "zeroconf", "beautifulsoup4"],
     "integration_type": "hub",
-    "version": "0.0.1",
+    "iot_class": "local_polling",
     "issue_tracker": "https://github.com/geeks-r-us/maxstorage_ultimate/issues",
-    "documentation": "https://github.com/geeks-r-us/maxstorage_ultimate"
+    "version": "0.0.1",
+    "zeroconf": ["_maxstorage._tcp.local."]
+
 }
