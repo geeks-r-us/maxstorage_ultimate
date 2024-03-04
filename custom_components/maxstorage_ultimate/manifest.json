@@ -10,5 +10,4 @@
     "issue_tracker": "https://github.com/geeks-r-us/maxstorage_ultimate/issues",
     "version": "0.0.1",
     "zeroconf": ["_maxstorage._tcp.local."]
-
 }
