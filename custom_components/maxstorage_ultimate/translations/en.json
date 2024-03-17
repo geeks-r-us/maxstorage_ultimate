@@ -32,25 +32,25 @@
   },
   "entity": {
     "sensor": {
-      "batterySoC": {
+      "battery_soc": {
         "name": "Battery SoC"
       },
-      "batteryCapacity": {
+      "battery_capacity": {
         "name": "Battery Capacity"
       },
-      "batteryPower": {
+      "battery_power": {
         "name": "Battery Power"
       },
-      "gridPower": {
+      "grid_power": {
         "name": "Grid Power"
       },
-      "usagePower": {
+      "usage_power": {
         "name": "Usage Power"
       },
-      "plantPower": {
+      "plant_power": {
         "name": "Plant Power"
       },
-      "storageDCPower": {
+      "storage_dc_power": {
         "name": "Storage DC Power"
       }
     }
