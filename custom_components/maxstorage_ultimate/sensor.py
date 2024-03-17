@@ -93,7 +93,7 @@ class MaxStorageSensor(
 SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     MaxStorageSensorDescription(
         key="batterySoC",
-        translation_key="batterySoC",
+        translation_key="battery_soc",
         icon="mdi:battery",
         value_fn=lambda data: data["batterySoC"],
         native_unit_of_measurement=PERCENTAGE,
@@ -102,7 +102,7 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     ),
     MaxStorageSensorDescription(
         key="batteryCapacity",
-        translation_key="batteryCapacity",
+        translation_key="battery_capacity",
         icon="mdi:battery",
         value_fn=lambda data: data["batteryCapacity"],
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -111,7 +111,7 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     ),
     MaxStorageSensorDescription(
         key="batteryPower",
-        translation_key="batteryPower",
+        translation_key="battery_power",
         icon="mdi:battery",
         value_fn=lambda data: data["batteryPower"],
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -120,7 +120,7 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     ),
     MaxStorageSensorDescription(
         key="gridPower",
-        translation_key="gridPower",
+        translation_key="grid_power",
         icon="mdi:transmission-tower",
         value_fn=lambda data: data["gridPower"],
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -129,7 +129,7 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     ),
     MaxStorageSensorDescription(
         key="usagePower",
-        translation_key="usagePower",
+        translation_key="usage_power",
         icon="mdi:transmission-tower",
         value_fn=lambda data: data["usagePower"],
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -138,7 +138,7 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     ),
     MaxStorageSensorDescription(
         key="plantPower",
-        translation_key="plantPower",
+        translation_key="plant_power",
         icon="mdi:solar-power",
         value_fn=lambda data: data["plantPower"],
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -146,7 +146,7 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
     ),
     MaxStorageSensorDescription(
-        key="storageDCPower",
+        key="storage_dc_power",
         translation_key="storageDCPower",
         icon="mdi:solar-power",
         value_fn=lambda data: data["storageDCPower"],

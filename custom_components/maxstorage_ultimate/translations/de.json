@@ -30,25 +30,25 @@
   },
   "entity": {
     "sensor": {
-      "batterySoC": {
+      "battery_soc": {
         "name": "Batterie SoC"
       },
-      "batteryCapacity": {
+      "battery_capacity": {
         "name": "Batterie Kapazität"
       },
-      "batteryPower": {
+      "battery_power": {
         "name": "Batterie Leistung"
       },
-      "gridPower": {
+      "grid_power": {
         "name": "Netzleistung"
       },
-      "usagePower": {
+      "usage_power": {
         "name": "Energieverbrauch"
       },
-      "plantPower": {
+      "plant_power": {
         "name": "PV-Leistung"
       },
-      "storageDCPower": {
+      "storage_dc_power": {
         "name": "Speicher DC Leistung"
       }
     }
