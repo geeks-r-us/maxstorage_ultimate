@@ -102,14 +102,36 @@ class MaxStorageClient:
         content = await response.text()
         soup = BeautifulSoup(content, "html.parser")
 
-        elements = soup.find_all("p", style="white-space: normal;padding: 5px")
-        for element in elements:
-            entries = element.find_all("b")
-            for entry in entries:
-                if entry.next_sibling is not None:
-                    self.device_info[
-                        entry.text.strip().replace(":", "")
-                    ] = entry.next_sibling.strip()
+        # Find all potential keys (bold text could be considered a key)
+        keys = soup.find_all(["b", "div"])
+        current_key = None
+
+        for element in keys:
+            text = element.get_text().strip().replace(":", "")
+
+            # If the current element is a key
+            if text and (
+                text
+                in [
+                    "Anlagenname",
+                    "MasterController-Nummer",
+                    "Firmware-Version",
+                    "Hardware-Version",
+                    "Ident",
+                ]
+            ):
+                current_key = text
+                # Directly following sibling logic for Version 3.4.0
+                if element.next_sibling and not element.next_sibling.name:
+                    self.device_info[current_key] = element.next_sibling.strip()
+                # Following div logic for Version 3.4.3
+                elif element.find_next_sibling():
+                    sibling = element.find_next_sibling()
+                    if sibling and not sibling.find(["b"]):
+                        self.device_info[current_key] = sibling.get_text(strip=True)
+
+        if not self.device_info:
+            raise DataParserError("Failed to parse device info")
 
     def get_device_info(self):
         """Return the device info."""
@@ -146,6 +168,10 @@ class MaxStorageClient:
     async def close(self):
         """Close the aiohttp session."""
         await self.session.close()
+
+
+class DataParserError(Exception):
+    """Exception raised when data parsing fails."""
 
 
 class AuthenticationFailedError(Exception):
