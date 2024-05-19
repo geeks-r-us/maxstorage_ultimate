@@ -131,6 +131,7 @@ class MaxStorageClient:
                         self.device_info[current_key] = sibling.get_text(strip=True)
 
         if not self.device_info:
+            _LOGGER.error("Failed to parse device info from response: %s", content)
             raise DataParserError("Failed to parse device info")
 
     def get_device_info(self):
