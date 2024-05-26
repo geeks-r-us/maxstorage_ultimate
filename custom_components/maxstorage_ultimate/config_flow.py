@@ -7,7 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlow
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
@@ -211,3 +211,53 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
             description_placeholders={"name": self._name},
             errors=errors or {},
         )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: ConfigEntry,
+    ) -> MaxStorageOptionsFlowHandler:
+        """Get the options flow for this handler."""
+        return MaxStorageOptionsFlowHandler(config_entry)
+
+
+class MaxStorageOptionsFlowHandler(OptionsFlow):
+    """Handle MaxStorage options."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize MaxStorage options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        options = self.config_entry.options
+        data_schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_STORAGE_HOST,
+                    default=options.get(
+                        CONF_STORAGE_HOST, self.config_entry.data[CONF_STORAGE_HOST]
+                    ),
+                ): str,
+                vol.Required(
+                    CONF_STORAGE_USER,
+                    default=options.get(
+                        CONF_STORAGE_USER, self.config_entry.data[CONF_STORAGE_USER]
+                    ),
+                ): str,
+                vol.Required(
+                    CONF_STORAGE_PASSWORD,
+                    default=options.get(
+                        CONF_STORAGE_PASSWORD,
+                        self.config_entry.data[CONF_STORAGE_PASSWORD],
+                    ),
+                ): str,
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=data_schema)
