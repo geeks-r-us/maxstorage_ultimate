@@ -78,6 +78,9 @@ class MaxStorageClient:
         except subprocess.CalledProcessError as ex:
             _LOGGER.error("Error getting MAC address: %s", ex)
             return None
+        except FileNotFoundError as ex:
+            _LOGGER.error("Error getting MAC address: %s", ex)
+            return None
 
     async def ensure_authenticated(self):
         """Ensure that the session is authenticated."""
