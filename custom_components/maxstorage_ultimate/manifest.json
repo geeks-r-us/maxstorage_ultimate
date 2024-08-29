@@ -8,6 +8,6 @@
     "iot_class": "local_polling",
     "issue_tracker": "https://github.com/geeks-r-us/maxstorage_ultimate/issues",
     "requirements": ["aiohttp", "zeroconf", "beautifulsoup4"],
-    "version": "0.0.1",
+    "version": "0.0.2",
     "zeroconf": ["_maxstorage._tcp.local."]
 }
