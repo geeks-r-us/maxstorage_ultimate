@@ -41,6 +41,10 @@ Host, credentials and the update interval (5–3600 s, default 30 s) can be chan
 | Sensor | Plant Energy | kWh (integrated, for the energy dashboard) |
 | Binary sensor | One per named relais | on/off |
 
+## Diagnostics
+
+For bug reports or new firmware/swarm setups, use *Settings → Devices & services → Max.Storage Ultimate → ⋮ → Download diagnostics*. The file contains the raw device response; host, credentials, name, serial number and MAC address are redacted. Please check it before attaching it to an issue.
+
 ## Development
 
 ```
