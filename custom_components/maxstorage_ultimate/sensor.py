@@ -161,19 +161,33 @@ class MaxStorageEnergySensor(MaxStorageSensor, RestoreSensor):
         self.async_write_ha_state()
 
 
+def _number(data: dict[str, Any], key: str) -> float | None:
+    """Return data[key] as a float, or None if missing or not numeric.
+
+    The device mixes numbers and numeric strings ("-23.5") in its response.
+    """
+    value = data.get(key)
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _battery_charge_power(data: dict[str, Any]) -> float | None:
     """Return the power flowing into the battery (W), 0 while discharging.
 
     The device reports batteryPower as positive while charging and negative
     while discharging.
     """
-    power = data.get("batteryPower")
+    power = _number(data, "batteryPower")
     return None if power is None else max(0, power)
 
 
 def _battery_discharge_power(data: dict[str, Any]) -> float | None:
     """Return the power flowing out of the battery (W), 0 while charging."""
-    power = data.get("batteryPower")
+    power = _number(data, "batteryPower")
     return None if power is None else max(0, -power)
 
 
@@ -183,13 +197,13 @@ def _grid_import_power(data: dict[str, Any]) -> float | None:
     The device reports gridPower as positive while feeding in and negative
     while drawing from the grid.
     """
-    power = data.get("gridPower")
+    power = _number(data, "gridPower")
     return None if power is None else max(0, -power)
 
 
 def _grid_export_power(data: dict[str, Any]) -> float | None:
     """Return the power fed into the grid (W), 0 while drawing."""
-    power = data.get("gridPower")
+    power = _number(data, "gridPower")
     return None if power is None else max(0, power)
 
 
@@ -324,7 +338,7 @@ ENERGY_SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
         key="plantEnergy",
         translation_key="plant_energy",
         icon="mdi:solar-power",
-        value_fn=lambda data: data.get("plantPower"),
+        value_fn=lambda data: _number(data, "plantPower"),
     ),
 )
 

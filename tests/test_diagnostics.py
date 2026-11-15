@@ -50,3 +50,26 @@ async def test_diagnostics_redacts_sensitive_values(hass: HomeAssistant, client_
         assert secret not in dumped, secret
     assert result["entry"]["data"]["maxstorage_password"] == "**REDACTED**"
     assert result["entry"]["options"]["maxstorage_host"] == "**REDACTED**"
+
+
+async def test_diagnostics_redacts_weather_location(hass: HomeAssistant, client_cls):
+    weather = {"coord": {"lon": 9.1, "lat": 48.2}, "name": "Examplecity"}
+    data = {
+        **DATA,
+        "WeatherData": weather,
+        "Swarming": {"swarmJob": "master", "worker1": {"WeatherData": weather}},
+    }
+    client_cls.side_effect = lambda *a, **k: _client_returning(data)
+    entry = _entry()
+    await _setup(hass, entry)
+
+    dumped = json.dumps(await async_get_config_entry_diagnostics(hass, entry))
+    assert "Examplecity" not in dumped
+    assert "48.2" not in dumped
+    assert "swarmJob" in dumped  # the rest of the raw data is kept
+
+
+def _client_returning(data):
+    client = _make_client()
+    client.get_data.return_value = data
+    return client

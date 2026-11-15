@@ -37,3 +37,20 @@ def test_grid_split(power, imported, exported):
 def test_grid_split_missing_value():
     assert _grid_import_power({}) is None
     assert _grid_export_power({}) is None
+
+
+@pytest.mark.parametrize("value", ["-", "", None, "abc", True])
+def test_split_ignores_non_numeric_values(value):
+    data = {"batteryPower": value, "gridPower": value}
+    assert _battery_charge_power(data) is None
+    assert _battery_discharge_power(data) is None
+    assert _grid_import_power(data) is None
+    assert _grid_export_power(data) is None
+
+
+def test_split_handles_numeric_strings():
+    # the device reports some values as strings, e.g. gridPower "-23.5"
+    assert _grid_import_power({"gridPower": "-23.5"}) == 23.5
+    assert _grid_export_power({"gridPower": "-23.5"}) == 0
+    assert _battery_discharge_power({"batteryPower": "300"}) == 0
+    assert _battery_charge_power({"batteryPower": "300"}) == 300

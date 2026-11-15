@@ -88,7 +88,7 @@ async def test_setup_creates_sensors(hass: HomeAssistant, client_cls):
     for key, expected in SENSOR_STATES.items():
         entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"abc123_{key}")
         assert entity_id, f"sensor {key} not registered"
-        assert hass.states.get(entity_id).state == expected
+        assert float(hass.states.get(entity_id).state) == float(expected)
 
 
 async def test_setup_creates_only_named_relais(hass: HomeAssistant, client_cls):

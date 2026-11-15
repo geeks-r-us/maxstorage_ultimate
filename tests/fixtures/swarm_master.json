@@ -1,0 +1,159 @@
+{
+  "energyValTimeStamp": "2026-11-15T21:03:25Z",
+  "deviceTyp": "mc2",
+  "plantPower": 0,
+  "storageDCPower": 0,
+  "storageMPPT1Power": 0,
+  "storageMPPT2Power": 0,
+  "usagePower": "1235.5",
+  "gridPower": "-23.5",
+  "batteryPower": 0,
+  "batteryCapacity": 15000,
+  "batterySoC": 10.4,
+  "MaxRemotePercent": "-",
+  "systemState": "1",
+  "energyFlowVersion": "v2",
+  "SpecialState": {
+    "deviceInUpdate": "false",
+    "dcSwitchOff": "false",
+    "gridCodeUnknown": "false",
+    "inWinterMode": "false",
+    "inBMZEqualization": "false",
+    "inPeakShaving": "false",
+    "inOptimizationLimit": "false",
+    "inBatteryCalibration": "false",
+    "noPowerMeter": "false",
+    "gridError": "false",
+    "gridLocked": "false",
+    "islandActive": "false",
+    "serviceMode": "false",
+    "uzkState": 0
+  },
+  "Relais": {
+    "name": [
+      "SG-Ready",
+      "Heizlüfter",
+      "",
+      ""
+    ],
+    "mode": [
+      "auto",
+      "auto",
+      "auto",
+      "auto"
+    ],
+    "value": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "SmartHeater": {
+    "enabled": "true",
+    "active": "false",
+    "vendor": "defaultvendor",
+    "error": "false",
+    "power": "0",
+    "mode": "auto"
+  },
+  "Wallbox": {
+    "enabled": "true",
+    "allowed": "true",
+    "mode": "on",
+    "error": "false",
+    "power": "0.0"
+  },
+  "Debug": {
+    "emRuntime": "748",
+    "fanspeed0": "0",
+    "fanspeed1": "0",
+    "digitalInputs": 0,
+    "wrSetPower": "0",
+    "wrStatus": "No Communication",
+    "fcSetPower": "0",
+    "MaxChargePower": "0",
+    "MaxDischargePower": "-1152"
+  },
+  "Swarming": {
+    "swarmJob": "master",
+    "worker1": {
+      "energyValTimeStamp": "2026-11-15T21:03:25Z",
+      "deviceTyp": "mc2",
+      "plantPower": 0,
+      "storageDCPower": 0,
+      "storageMPPT1Power": 0,
+      "storageMPPT2Power": 0,
+      "usagePower": "0",
+      "gridPower": "0",
+      "batteryPower": -1275,
+      "batteryCapacity": 12000,
+      "batterySoC": 18,
+      "MaxRemotePercent": "-",
+      "systemState": "1",
+      "energyFlowVersion": "v2",
+      "SpecialState": {
+        "deviceInUpdate": "false",
+        "dcSwitchOff": "false",
+        "gridCodeUnknown": "false",
+        "inWinterMode": "false",
+        "inBMZEqualization": "false",
+        "inPeakShaving": "false",
+        "inOptimizationLimit": "false",
+        "inBatteryCalibration": "false",
+        "noPowerMeter": "false",
+        "gridError": "false",
+        "gridLocked": "false",
+        "islandActive": "false",
+        "serviceMode": "false",
+        "uzkState": 0
+      },
+      "Relais": {
+        "name": [
+          "",
+          "",
+          "",
+          ""
+        ],
+        "mode": [
+          "auto",
+          "auto",
+          "auto",
+          "auto"
+        ],
+        "value": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "SmartHeater": {
+        "enabled": "false",
+        "active": "false",
+        "vendor": "defaultvendor",
+        "error": "false",
+        "power": 0,
+        "mode": "auto"
+      },
+      "Wallbox": {
+        "enabled": "false",
+        "allowed": "false",
+        "mode": "auto",
+        "error": "false",
+        "power": 0
+      },
+      "Debug": {
+        "emRuntime": "173",
+        "fanspeed0": "0",
+        "fanspeed1": "0",
+        "digitalInputs": 0,
+        "wrSetPower": "0",
+        "wrStatus": "Netzbetrieb",
+        "fcSetPower": "-1299",
+        "MaxChargePower": "6675",
+        "MaxDischargePower": "-3350"
+      }
+    }
+  }
+}
