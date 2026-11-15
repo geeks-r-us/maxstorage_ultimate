@@ -60,6 +60,15 @@
       },
       "storage_dc_power": {
         "name": "Storage DC Power"
+      },
+      "battery_charge_energy": {
+        "name": "Battery Charge Energy"
+      },
+      "battery_discharge_energy": {
+        "name": "Battery Discharge Energy"
+      },
+      "plant_energy": {
+        "name": "Plant Energy"
       }
     }
   },
