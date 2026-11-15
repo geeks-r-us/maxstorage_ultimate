@@ -13,7 +13,12 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 
-from .client import AuthenticationFailedError, InvalidHostError, MaxStorageClient
+from .client import (
+    AuthenticationFailedError,
+    InvalidHostError,
+    MaxStorageClient,
+    normalize_host,
+)
 from .const import (
     CONF_SCAN_INTERVAL,
     CONF_STORAGE_HOST,
@@ -113,7 +118,7 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
             return self._show_setup_form_init()
 
         self._name = user_input[CONF_NAME]
-        self._host = user_input[CONF_STORAGE_HOST]
+        self._host = normalize_host(user_input[CONF_STORAGE_HOST])
         self._user = user_input[CONF_STORAGE_USER]
         self._password = user_input[CONF_STORAGE_PASSWORD]
 
@@ -233,6 +238,10 @@ class MaxStorageOptionsFlowHandler(OptionsFlow):
     ) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
+            user_input = {
+                **user_input,
+                CONF_STORAGE_HOST: normalize_host(user_input[CONF_STORAGE_HOST]),
+            }
             return self.async_create_entry(title="", data=user_input)
 
         options = self.config_entry.options

@@ -12,6 +12,7 @@ from custom_components.maxstorage_ultimate.client import (
     HTTPError,
     InvalidHostError,
     MaxStorageClient,
+    normalize_host,
 )
 
 HTML_340 = """<html><body>
@@ -162,5 +163,30 @@ async def test_unreachable_host_raises_invalid_host(socket_enabled):
     try:
         with pytest.raises(InvalidHostError):
             await c.get_data()
+    finally:
+        await c.close()
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("192.168.1.5", "192.168.1.5"),
+        ("  192.168.1.5  ", "192.168.1.5"),
+        ("http://192.168.123.3/", "192.168.123.3"),
+        ("https://soma.local", "soma.local"),
+        ("HTTP://soma.fritz.box/home.php", "soma.fritz.box"),
+        ("soma.local/", "soma.local"),
+        ("192.168.1.5:8080/x", "192.168.1.5:8080"),
+    ],
+)
+def test_normalize_host(raw, expected):
+    assert normalize_host(raw) == expected
+
+
+async def test_client_uses_normalized_host():
+    c = MaxStorageClient("http://192.168.123.3/", "user", "pw")
+    try:
+        assert c.base_url == "192.168.123.3"
+        assert c.login_url == "http://192.168.123.3/home.php"
     finally:
         await c.close()

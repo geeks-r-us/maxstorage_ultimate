@@ -13,6 +13,17 @@ from bs4 import BeautifulSoup
 _LOGGER = logging.getLogger(__name__)
 
 
+def normalize_host(host: str) -> str:
+    """Strip whitespace, URL scheme, path and trailing slashes from a host input.
+
+    "http://192.168.1.5/" -> "192.168.1.5"
+    """
+    host = host.strip()
+    if "://" in host:
+        host = host.split("://", 1)[1]
+    return host.split("/", 1)[0].strip()
+
+
 class MaxStorageClient:
     """Client for interacting with the MaxStorage web service."""
 
@@ -26,6 +37,7 @@ class MaxStorageClient:
         """
         cookie_jar = aiohttp.CookieJar(unsafe=True)
         self.session = aiohttp.ClientSession(cookie_jar=cookie_jar)
+        base_url = normalize_host(base_url)
         self.base_url = base_url
         self.login_url = f"http://{base_url}/home.php"
         self.data_url = f"http://{base_url}/shared/energycontrolfunctions.php"
