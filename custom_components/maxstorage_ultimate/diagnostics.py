@@ -21,6 +21,8 @@ TO_REDACT_CONFIG = {
     "name",
     "unique_id",
 }
+# The weather block contains the plant's location (coordinates, city name).
+TO_REDACT_DATA = {"WeatherData"}
 TO_REDACT_DEVICE = {"Ident", "MasterController-Nummer", "Anlagenname", "mac"}
 
 
@@ -31,7 +33,7 @@ async def async_get_config_entry_diagnostics(
 
     Contains the raw device response (`getFullSwarmLiveDataJSON`), which helps
     to support new firmware versions and swarm setups. Credentials, host,
-    name and device identifiers are redacted.
+    name, device identifiers and the weather block (location) are redacted.
     """
     runtime = hass.data[DOMAIN][entry.entry_id]
     coordinator = runtime["coordinator"]
@@ -48,5 +50,5 @@ async def async_get_config_entry_diagnostics(
         ),
         "update_interval_seconds": coordinator.update_interval.total_seconds(),
         "last_update_success": coordinator.last_update_success,
-        "data": coordinator.data,
+        "data": async_redact_data(coordinator.data, TO_REDACT_DATA),
     }
