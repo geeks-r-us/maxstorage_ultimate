@@ -52,5 +52,18 @@
         "name": "Speicher DC Leistung"
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Max.Storage Ultimate Einstellungen",
+        "data": {
+          "maxstorage_host": "Host (IP oder Hostname)",
+          "maxstorage_user": "Benutzername",
+          "maxstorage_password": "Passwort",
+          "scan_interval": "Aktualisierungsintervall in Sekunden (5-3600)"
+        }
+      }
+    }
   }
 }

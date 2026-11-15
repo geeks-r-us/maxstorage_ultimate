@@ -54,5 +54,18 @@
         "name": "Storage DC Power"
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Max.Storage Ultimate settings",
+        "data": {
+          "maxstorage_host": "Host (ip or hostname)",
+          "maxstorage_user": "Username",
+          "maxstorage_password": "Password",
+          "scan_interval": "Update interval in seconds (5-3600)"
+        }
+      }
+    }
   }
 }

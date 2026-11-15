@@ -15,17 +15,21 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .client import AuthenticationFailedError, InvalidHostError, MaxStorageClient
 from .const import (
+    CONF_SCAN_INTERVAL,
     CONF_STORAGE_HOST,
     CONF_STORAGE_NAME,
     CONF_STORAGE_PASSWORD,
     CONF_STORAGE_USER,
     CONF_STORAGE_VPN,
     DEFAULT_PASSWORD,
+    DEFAULT_SCAN_INTERVAL,
     DEFAULT_USER,
     DOMAIN,
     ERROR_AUTH_INVALID,
     ERROR_CANNOT_CONNECT,
     ERROR_UNKNOWN,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
     SENSOR_PREFIX,
 )
 
@@ -254,6 +258,13 @@ class MaxStorageOptionsFlowHandler(OptionsFlow):
                         self.config_entry.data[CONF_STORAGE_PASSWORD],
                     ),
                 ): str,
+                vol.Required(
+                    CONF_SCAN_INTERVAL,
+                    default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                ): vol.All(
+                    vol.Coerce(int),
+                    vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
+                ),
             }
         )
 

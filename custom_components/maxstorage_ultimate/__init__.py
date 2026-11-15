@@ -4,7 +4,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .client import MaxStorageClient
-from .const import CONF_STORAGE_HOST, CONF_STORAGE_PASSWORD, CONF_STORAGE_USER, DOMAIN
+from .const import (
+    CONF_SCAN_INTERVAL,
+    CONF_STORAGE_HOST,
+    CONF_STORAGE_PASSWORD,
+    CONF_STORAGE_USER,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 from .coordinator import MaxStorageDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,7 +43,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await client.close()
             raise
 
-        coordinator = MaxStorageDataUpdateCoordinator(hass, client)
+        coordinator = MaxStorageDataUpdateCoordinator(
+            hass, client, config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        )
         hass.data[DOMAIN][entry.entry_id] = {
             "coordinator": coordinator,
             "client": client,
