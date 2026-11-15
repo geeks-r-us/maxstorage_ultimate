@@ -28,12 +28,16 @@ Host, credentials and the update interval (5–3600 s, default 30 s) can be chan
 | Sensor | Battery Power (signed: charging +, discharging −) | W |
 | Sensor | Battery Charge Power | W |
 | Sensor | Battery Discharge Power | W |
-| Sensor | Grid Power | W |
+| Sensor | Grid Power (signed: feeding in +, drawing −) | W |
+| Sensor | Grid Import Power | W |
+| Sensor | Grid Export Power | W |
 | Sensor | Usage Power | W |
 | Sensor | Plant Power | W |
 | Sensor | Storage DC Power | W |
 | Sensor | Battery Charge Energy | kWh (integrated, for the energy dashboard) |
 | Sensor | Battery Discharge Energy | kWh (integrated, for the energy dashboard) |
+| Sensor | Grid Import Energy | kWh (integrated, for the energy dashboard) |
+| Sensor | Grid Export Energy | kWh (integrated, for the energy dashboard) |
 | Sensor | Plant Energy | kWh (integrated, for the energy dashboard) |
 | Binary sensor | One per named relais | on/off |
 

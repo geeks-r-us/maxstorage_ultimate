@@ -177,6 +177,22 @@ def _battery_discharge_power(data: dict[str, Any]) -> float | None:
     return None if power is None else max(0, -power)
 
 
+def _grid_import_power(data: dict[str, Any]) -> float | None:
+    """Return the power drawn from the grid (W), 0 while feeding in.
+
+    The device reports gridPower as positive while feeding in and negative
+    while drawing from the grid.
+    """
+    power = data.get("gridPower")
+    return None if power is None else max(0, -power)
+
+
+def _grid_export_power(data: dict[str, Any]) -> float | None:
+    """Return the power fed into the grid (W), 0 while drawing."""
+    power = data.get("gridPower")
+    return None if power is None else max(0, power)
+
+
 SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     MaxStorageSensorDescription(
         key="batterySoC",
@@ -233,6 +249,24 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
     ),
     MaxStorageSensorDescription(
+        key="gridImportPower",
+        translation_key="grid_import_power",
+        icon="mdi:transmission-tower-export",
+        value_fn=_grid_import_power,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.POWER,
+    ),
+    MaxStorageSensorDescription(
+        key="gridExportPower",
+        translation_key="grid_export_power",
+        icon="mdi:transmission-tower-import",
+        value_fn=_grid_export_power,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.POWER,
+    ),
+    MaxStorageSensorDescription(
         key="usagePower",
         translation_key="usage_power",
         icon="mdi:transmission-tower",
@@ -273,6 +307,18 @@ ENERGY_SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
         translation_key="battery_discharge_energy",
         icon="mdi:battery-arrow-down",
         value_fn=_battery_discharge_power,
+    ),
+    MaxStorageSensorDescription(
+        key="gridImportEnergy",
+        translation_key="grid_import_energy",
+        icon="mdi:transmission-tower-export",
+        value_fn=_grid_import_power,
+    ),
+    MaxStorageSensorDescription(
+        key="gridExportEnergy",
+        translation_key="grid_export_energy",
+        icon="mdi:transmission-tower-import",
+        value_fn=_grid_export_power,
     ),
     MaxStorageSensorDescription(
         key="plantEnergy",

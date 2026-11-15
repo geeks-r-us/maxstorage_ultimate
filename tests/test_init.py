@@ -36,6 +36,8 @@ SENSOR_STATES = {
     "battery_charge_power": "0",
     "battery_discharge_power": "300",
     "grid_power": "120",
+    "grid_import_power": "0",
+    "grid_export_power": "120",
     "usage_power": "900",
     "plant_power": "1500",
     "storage_dc_power": "250",
