@@ -41,6 +41,12 @@
       "battery_power": {
         "name": "Batterie Leistung"
       },
+      "battery_charge_power": {
+        "name": "Batterie Ladeleistung"
+      },
+      "battery_discharge_power": {
+        "name": "Batterie Entladeleistung"
+      },
       "grid_power": {
         "name": "Netzleistung"
       },

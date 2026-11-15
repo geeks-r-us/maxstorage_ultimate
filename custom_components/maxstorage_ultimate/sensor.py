@@ -90,6 +90,22 @@ class MaxStorageSensor(
         self.async_write_ha_state()
 
 
+def _battery_charge_power(data: dict[str, Any]) -> float | None:
+    """Return the power flowing into the battery (W), 0 while discharging.
+
+    The device reports batteryPower as positive while charging and negative
+    while discharging.
+    """
+    power = data.get("batteryPower")
+    return None if power is None else max(0, power)
+
+
+def _battery_discharge_power(data: dict[str, Any]) -> float | None:
+    """Return the power flowing out of the battery (W), 0 while charging."""
+    power = data.get("batteryPower")
+    return None if power is None else max(0, -power)
+
+
 SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     MaxStorageSensorDescription(
         key="batterySoC",
@@ -114,6 +130,24 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
         translation_key="battery_power",
         icon="mdi:battery",
         value_fn=lambda data: data["batteryPower"],
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.POWER,
+    ),
+    MaxStorageSensorDescription(
+        key="batteryChargePower",
+        translation_key="battery_charge_power",
+        icon="mdi:battery-charging",
+        value_fn=_battery_charge_power,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.POWER,
+    ),
+    MaxStorageSensorDescription(
+        key="batteryDischargePower",
+        translation_key="battery_discharge_power",
+        icon="mdi:battery-arrow-down",
+        value_fn=_battery_discharge_power,
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=SensorDeviceClass.POWER,
