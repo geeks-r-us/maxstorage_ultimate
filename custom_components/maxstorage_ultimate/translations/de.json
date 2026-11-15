@@ -1,14 +1,16 @@
 {
   "config": {
     "abort": {
-      "already_configured": "Gerät ist bereits konfiguriert"
+      "already_configured": "Gerät ist bereits konfiguriert",
+      "swarm_worker": "Dieses Gerät ist ein Schwarm-Slave. Bitte stattdessen den Master hinzufügen; die Daten aller Slaves sind dort automatisch enthalten."
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
       "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse",
       "unknown": "Unerwarteter Fehler",
       "invalid_auth": "Ungültiger Benutzername oder ungültiges Passwort",
-      "already_configured": "Gerät ist bereits konfiguriert"
+      "already_configured": "Gerät ist bereits konfiguriert",
+      "swarm_worker": "Dieses Gerät ist ein Schwarm-Slave. Bitte stattdessen den Master hinzufügen; die Daten aller Slaves sind dort automatisch enthalten."
     },
     "flow_title": "{name}",
     "step": {
