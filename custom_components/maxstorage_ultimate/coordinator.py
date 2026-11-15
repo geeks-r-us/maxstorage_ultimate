@@ -55,13 +55,3 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
         if self.api.mac:
             di["connections"] = {(dr.CONNECTION_NETWORK_MAC, self.api.mac)}
         return di
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique ID."""
-        return self._unique_id
-
-    @property
-    def mac(self) -> str:
-        """Return the MAC address."""
-        return dr.format_mac(self._unique_id)

@@ -95,14 +95,18 @@ class MaxStorageClient:
     async def authenticate(self):
         """Authenticate with the server. The session will handle the cookie."""
         data = {"username": self.username, "password": self.password}
-        async with self.session.post(self.login_url, data=data) as response:
-            if response.status == 200:
-                self.last_auth_time = time.time()
-                await self._read_device_info(response)
-            else:
-                raise AuthenticationFailedError(
-                    f"Authentication Failed with status code {response.status}: {response.text}"
-                )
+        try:
+            async with self.session.post(self.login_url, data=data) as response:
+                if response.status == 200:
+                    await self._read_device_info(response)
+                    self.last_auth_time = time.time()
+                else:
+                    raise AuthenticationFailedError(
+                        f"Authentication Failed with status code {response.status}: "
+                        f"{await response.text()}"
+                    )
+        except aiohttp.ClientConnectorError as e:
+            raise InvalidHostError(f"Invalid host: {self.login_url}") from e
 
     async def _read_device_info(self, response: aiohttp.ClientResponse):
         """Read the device info from the response."""
@@ -154,23 +158,31 @@ class MaxStorageClient:
         )
 
     async def get_data(self):
-        """Make a POST request to the data endpoint using the session with the 'getFullSwarmLiveDataJSON' parameter."""
+        """Fetch the live data using the 'getFullSwarmLiveDataJSON' parameter.
+
+        If the device rejects the session (401/403), authenticate again once.
+        """
         await self.ensure_authenticated()
         try:
-            async with self.session.post(
-                self.data_url, data={"getFullSwarmLiveDataJSON": 1}
-            ) as response:
-                if response.status == 200:
+            for attempt in (1, 2):
+                async with self.session.post(
+                    self.data_url, data={"getFullSwarmLiveDataJSON": 1}
+                ) as response:
+                    if response.status in (401, 403) and attempt == 1:
+                        self.last_auth_time = None
+                        await self.authenticate()
+                        continue
+                    if response.status != 200:
+                        raise HTTPError(
+                            f"Failed to fetch data with status code {response.status}: "
+                            f"{await response.text()}"
+                        )
                     try:
                         return await response.json(content_type=None)
                     except ValueError as e:
                         raise ValueError(
-                            f"Response not in JSON format: {response.text}"
+                            f"Response not in JSON format: {await response.text()}"
                         ) from e
-                else:
-                    raise HTTPError(
-                        f"Failed to fetch data with status code {response.status}: {response.text}"
-                    )
         except aiohttp.ClientConnectorError as e:
             raise InvalidHostError(f"Invalid host: {self.data_url}") from e
 
