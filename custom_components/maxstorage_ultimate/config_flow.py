@@ -50,11 +50,10 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         """Initialize MaxStorage Ultimate."""
         _LOGGER.debug("config_flow.py:MaxStorageFlowHandler.maxstorage_ultimate_init")
 
+        client = MaxStorageClient(self._host, self._user, self._password)
         try:
-            client = MaxStorageClient(self._host, self._user, self._password)
             await client.get_data()
             await self.async_set_unique_id(client.get_device_info()["Ident"])
-            await client.close()
         except AuthenticationFailedError:
             return ERROR_AUTH_INVALID
         except InvalidHostError:
@@ -62,6 +61,8 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         except Exception as e:  # pylint: disable=broad-except
             _LOGGER.error("Unexpected exception: %s", e)
             return ERROR_UNKNOWN
+        finally:
+            await client.close()
 
         return None
 
@@ -218,15 +219,11 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         config_entry: ConfigEntry,
     ) -> MaxStorageOptionsFlowHandler:
         """Get the options flow for this handler."""
-        return MaxStorageOptionsFlowHandler(config_entry)
+        return MaxStorageOptionsFlowHandler()
 
 
 class MaxStorageOptionsFlowHandler(OptionsFlow):
     """Handle MaxStorage options."""
-
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize MaxStorage options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

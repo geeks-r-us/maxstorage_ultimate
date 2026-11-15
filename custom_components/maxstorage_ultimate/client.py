@@ -1,5 +1,6 @@
 """Module provides a MaxStorageClient class for interacting with the MaxStorage web service."""
 import logging
+import asyncio
 import os
 import re
 import socket
@@ -37,12 +38,13 @@ class MaxStorageClient:
 
     async def setup(self):
         """Set up the client."""
-        ip = self.get_ip_address(self.base_url)
+        loop = asyncio.get_running_loop()
+        ip = await loop.run_in_executor(None, self.get_ip_address, self.base_url)
         if ip is None:
             raise InvalidHostError(f"Invalid host: {self.base_url}")
         await self.authenticate()
 
-        self.mac = self.get_mac_address(ip)
+        self.mac = await loop.run_in_executor(None, self.get_mac_address, ip)
 
     def get_ip_address(self, host) -> str | None:
         """Get the IP address of the host."""
@@ -54,20 +56,20 @@ class MaxStorageClient:
     def get_mac_address(self, ip_address):
         """Get the MAC address of the host."""
 
-        ping_cmd = ["ping", "-c", "1", ip_address]
-
         if os.name == "nt":  # Windows
+            ping_cmd = ["ping", "-n", "1", ip_address]
             cmd = ["arp", "-a"]
 
         else:  # Unix-based
+            ping_cmd = ["ping", "-c", "1", ip_address]
             cmd = ["arp", "-a", ip_address]
 
         try:
             output = subprocess.check_output(
-                ping_cmd, text=True
+                ping_cmd, text=True, timeout=10
             )  # Ping the host to ensure it's in the ARP table
             _LOGGER.debug(output)
-            output = subprocess.check_output(cmd, text=True)
+            output = subprocess.check_output(cmd, text=True, timeout=10)
             _LOGGER.debug(output)
             # Use regex to find the MAC address
             result = re.search(r"([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})", output)
@@ -77,6 +79,9 @@ class MaxStorageClient:
             return None
         except subprocess.CalledProcessError as ex:
             _LOGGER.error("Error getting MAC address: %s", ex)
+            return None
+        except subprocess.TimeoutExpired as ex:
+            _LOGGER.error("Timeout getting MAC address: %s", ex)
             return None
         except FileNotFoundError as ex:
             _LOGGER.error("Error getting MAC address: %s", ex)
