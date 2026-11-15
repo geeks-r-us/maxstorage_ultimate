@@ -218,3 +218,32 @@ async def test_options_flow_rejects_invalid_interval(hass: HomeAssistant):
                 "scan_interval": 1,
             },
         )
+
+
+async def test_user_flow_normalizes_host(hass: HomeAssistant, mock_client):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**USER_INPUT, "maxstorage_host": " http://192.168.1.50/ "}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"]["maxstorage_host"] == "192.168.1.50"
+
+
+async def test_options_flow_normalizes_host(hass: HomeAssistant):
+    entry = MockConfigEntry(domain=DOMAIN, data={**USER_INPUT}, unique_id="abc123")
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "maxstorage_host": "http://192.168.123.3/",
+            "maxstorage_user": "user",
+            "maxstorage_password": "pw",
+            "scan_interval": 30,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["maxstorage_host"] == "192.168.123.3"
