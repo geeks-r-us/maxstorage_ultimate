@@ -8,6 +8,7 @@ from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
+    RestoreSensor,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
@@ -16,6 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import MaxStorageDataUpdateCoordinator
@@ -34,6 +36,10 @@ async def async_setup_entry(
     sensors: list[MaxStorageSensor] = [
         MaxStorageSensor(coordinator, description) for description in SENSOR_TYPES
     ]
+    sensors.extend(
+        MaxStorageEnergySensor(coordinator, description)
+        for description in ENERGY_SENSOR_TYPES
+    )
     async_add_entities(sensors)
 
 
@@ -87,6 +93,71 @@ class MaxStorageSensor(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
+class MaxStorageEnergySensor(MaxStorageSensor, RestoreSensor):
+    """Energy (kWh) obtained by integrating a power value over time.
+
+    The device only reports power, so the energy is accumulated here with the
+    trapezoidal rule on every coordinator update. The total is restored after
+    a restart. Intervals longer than three polling periods (device or network
+    outage) are not integrated, as nothing is known about the power then.
+    """
+
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 3
+
+    def __init__(
+        self,
+        coordinator: MaxStorageDataUpdateCoordinator,
+        description: MaxStorageSensorDescription,
+    ) -> None:
+        """Initialize the energy sensor."""
+        super().__init__(coordinator, description)
+        self._energy_kwh: float = 0.0
+        self._last_power: float | None = None
+        self._last_time = None
+
+    @property
+    def native_value(self) -> float:
+        """Return the accumulated energy in kWh."""
+        return round(self._energy_kwh, 6)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the previous total and start integrating."""
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_sensor_data()) is not None and isinstance(
+            last.native_value, (int, float)
+        ):
+            self._energy_kwh = float(last.native_value)
+        self._start_sample()
+
+    def _start_sample(self) -> None:
+        """Remember the current power as the start of the next interval."""
+        self._last_power = self.entity_description.value_fn(self.coordinator.data)
+        self._last_time = dt_util.utcnow() if self._last_power is not None else None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Integrate the power since the previous update."""
+        power = self.entity_description.value_fn(self.coordinator.data)
+        now = dt_util.utcnow()
+        max_gap = 3 * (self.coordinator.update_interval.total_seconds())
+
+        if power is None:
+            self._last_power = None
+            self._last_time = None
+        else:
+            if self._last_power is not None and self._last_time is not None:
+                seconds = (now - self._last_time).total_seconds()
+                if 0 < seconds <= max_gap:
+                    average_w = (self._last_power + power) / 2
+                    self._energy_kwh += average_w * seconds / 3_600_000
+            self._last_power = power
+            self._last_time = now
         self.async_write_ha_state()
 
 
@@ -189,3 +260,25 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
     ),
 )
+
+ENERGY_SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
+    MaxStorageSensorDescription(
+        key="batteryChargeEnergy",
+        translation_key="battery_charge_energy",
+        icon="mdi:battery-charging",
+        value_fn=_battery_charge_power,
+    ),
+    MaxStorageSensorDescription(
+        key="batteryDischargeEnergy",
+        translation_key="battery_discharge_energy",
+        icon="mdi:battery-arrow-down",
+        value_fn=_battery_discharge_power,
+    ),
+    MaxStorageSensorDescription(
+        key="plantEnergy",
+        translation_key="plant_energy",
+        icon="mdi:solar-power",
+        value_fn=lambda data: data.get("plantPower"),
+    ),
+)
+

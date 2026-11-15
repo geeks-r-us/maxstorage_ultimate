@@ -58,6 +58,15 @@
       },
       "storage_dc_power": {
         "name": "Speicher DC Leistung"
+      },
+      "battery_charge_energy": {
+        "name": "Batterie Ladeenergie"
+      },
+      "battery_discharge_energy": {
+        "name": "Batterie Entladeenergie"
+      },
+      "plant_energy": {
+        "name": "PV-Energie"
       }
     }
   },
