@@ -43,6 +43,12 @@
       "battery_power": {
         "name": "Battery Power"
       },
+      "battery_charge_power": {
+        "name": "Battery Charge Power"
+      },
+      "battery_discharge_power": {
+        "name": "Battery Discharge Power"
+      },
       "grid_power": {
         "name": "Grid Power"
       },

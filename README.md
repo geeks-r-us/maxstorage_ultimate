@@ -25,7 +25,9 @@ Host, credentials and the update interval (5–3600 s, default 30 s) can be chan
 |------|--------|------|
 | Sensor | Battery SoC | % |
 | Sensor | Battery Capacity | Wh |
-| Sensor | Battery Power | W |
+| Sensor | Battery Power (signed: charging +, discharging −) | W |
+| Sensor | Battery Charge Power | W |
+| Sensor | Battery Discharge Power | W |
 | Sensor | Grid Power | W |
 | Sensor | Usage Power | W |
 | Sensor | Plant Power | W |
