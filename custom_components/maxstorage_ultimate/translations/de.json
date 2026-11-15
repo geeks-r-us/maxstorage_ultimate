@@ -6,15 +6,17 @@
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
       "invalid_host": "Ungültiger Hostname oder ungültige IP-Adresse",
-      "unknown": "Unerwarteter Fehler"
+      "unknown": "Unerwarteter Fehler",
+      "invalid_auth": "Ungültiger Benutzername oder ungültiges Passwort",
+      "already_configured": "Gerät ist bereits konfiguriert"
     },
     "flow_title": "{name}",
     "step": {
       "confirm": {
         "title": "Einrichtung Max.Storage Ultimate",
         "data": {
-          "maxstorage_user": "Username (default: user)",
-          "maxstorage_password": "Password (default: solarmax.com)"
+          "maxstorage_user": "Benutzername (Default: user)",
+          "maxstorage_password": "Passwort (Default: solarmax.com)"
         }
       },
       "user": {
@@ -50,6 +52,19 @@
       },
       "storage_dc_power": {
         "name": "Speicher DC Leistung"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Max.Storage Ultimate Einstellungen",
+        "data": {
+          "maxstorage_host": "Host (IP oder Hostname)",
+          "maxstorage_user": "Benutzername",
+          "maxstorage_password": "Passwort",
+          "scan_interval": "Aktualisierungsintervall in Sekunden (5-3600)"
+        }
       }
     }
   }

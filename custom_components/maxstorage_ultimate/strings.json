@@ -1,22 +1,73 @@
 {
-    "config": {
-      "abort": {
-        "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+  "config": {
+    "abort": {
+      "already_configured": "Device is already configured",
+      "already_in_progress": "Configuration flow is already in progress",
+      "ignore_ip6_link_local": "IPv6 link local address is not supported."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_host": "Invalid hostname or IP address",
+      "unknown": "Unexpected error",
+      "invalid_auth": "Invalid username or password",
+      "already_configured": "Device is already configured"
+    },
+    "flow_title": "{name}",
+    "step": {
+      "confirm": {
+        "title": "Set up Max.Storage Ultimate",
+        "data": {
+          "maxstorage_user": "Username (default: user)",
+          "maxstorage_password": "Password (default: solarmax.com)"
+        }
       },
-      "error": {
-        "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-        "invalid_auth": "[%key:common::config_flow::error::invalid_host%]",
-        "unknown": "[%key:common::config_flow::error::unknown%]"
+      "user": {
+        "title": "Set up Max.Storage Ultimate",
+        "data": {
+          "name": "This name will be prefixed to all parameter values (change as you like)",
+          "maxstorage_host": "Host (ip or hostname)",
+          "maxstorage_user": "Username (default: user)",
+          "maxstorage_password": "Password (default: solarmax.com)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_soc": {
+        "name": "Battery SoC"
       },
-      "step": {
-        "user": {
-          "data": {
-            "name": "[%key:common::config_flow::step::user::data::name%]",
-            "maxstorage_host": "[%key:common::config_flow::step::user::data::maxstorage_host%]",
-            "maxstorage_user": "[%key:common::config_flow::step::user::data::maxstorage_user%]",
-            "maxstorage_password": "[%key:common::config_flow::step::user::data::maxstorage_password%]"
-          }
+      "battery_capacity": {
+        "name": "Battery Capacity"
+      },
+      "battery_power": {
+        "name": "Battery Power"
+      },
+      "grid_power": {
+        "name": "Grid Power"
+      },
+      "usage_power": {
+        "name": "Usage Power"
+      },
+      "plant_power": {
+        "name": "Plant Power"
+      },
+      "storage_dc_power": {
+        "name": "Storage DC Power"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Max.Storage Ultimate settings",
+        "data": {
+          "maxstorage_host": "Host (ip or hostname)",
+          "maxstorage_user": "Username",
+          "maxstorage_password": "Password",
+          "scan_interval": "Update interval in seconds (5-3600)"
         }
       }
     }
   }
+}

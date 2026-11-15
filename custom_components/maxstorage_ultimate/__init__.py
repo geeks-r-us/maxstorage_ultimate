@@ -1,11 +1,17 @@
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 
 from .client import MaxStorageClient
-from .const import CONF_STORAGE_HOST, CONF_STORAGE_PASSWORD, CONF_STORAGE_USER, DOMAIN
+from .const import (
+    CONF_SCAN_INTERVAL,
+    CONF_STORAGE_HOST,
+    CONF_STORAGE_PASSWORD,
+    CONF_STORAGE_USER,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 from .coordinator import MaxStorageDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,14 +30,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN] = {}
 
     if hass.data[DOMAIN].get(entry.entry_id) is None:
+        # Options (set via the options flow) override the original entry data
+        config = {**entry.data, **entry.options}
         client = MaxStorageClient(
-            entry.data[CONF_STORAGE_HOST],
-            entry.data[CONF_STORAGE_USER],
-            entry.data[CONF_STORAGE_PASSWORD],
+            config[CONF_STORAGE_HOST],
+            config[CONF_STORAGE_USER],
+            config[CONF_STORAGE_PASSWORD],
         )
-        await client.setup()
+        try:
+            await client.setup()
+        except Exception:
+            await client.close()
+            raise
 
-        coordinator = MaxStorageDataUpdateCoordinator(hass, client)
+        coordinator = MaxStorageDataUpdateCoordinator(
+            hass, client, config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        )
         hass.data[DOMAIN][entry.entry_id] = {
             "coordinator": coordinator,
             "client": client,
@@ -41,7 +55,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         client = hass.data[DOMAIN][entry.entry_id]["client"]
 
     # Fetch initial data
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+        await client.close()
+        raise
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -54,17 +73,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("__init__.py:async_unload_entry(%s)", entry.as_dict())
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    # Close the aiohttp session
-    client = hass.data[DOMAIN][entry.entry_id]["client"]
-    await client.close()
-
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        data = hass.data[DOMAIN].pop(entry.entry_id)
+        # Close the aiohttp session
+        await data["client"].close()
     return unload_ok
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle options update."""
+    """Handle options update by reloading the entry with the new settings."""
     _LOGGER.debug("__init__.py:update_listener(%s)", entry.as_dict())
-    hass.data[DOMAIN][entry.entry_id].config(entry)
-    entry.title = entry.options[CONF_NAME]
+    await hass.config_entries.async_reload(entry.entry_id)

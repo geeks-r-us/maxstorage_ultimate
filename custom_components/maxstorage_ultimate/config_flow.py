@@ -15,17 +15,20 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .client import AuthenticationFailedError, InvalidHostError, MaxStorageClient
 from .const import (
+    CONF_SCAN_INTERVAL,
     CONF_STORAGE_HOST,
     CONF_STORAGE_NAME,
     CONF_STORAGE_PASSWORD,
     CONF_STORAGE_USER,
-    CONF_STORAGE_VPN,
     DEFAULT_PASSWORD,
+    DEFAULT_SCAN_INTERVAL,
     DEFAULT_USER,
     DOMAIN,
     ERROR_AUTH_INVALID,
     ERROR_CANNOT_CONNECT,
     ERROR_UNKNOWN,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
     SENSOR_PREFIX,
 )
 
@@ -50,11 +53,10 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         """Initialize MaxStorage Ultimate."""
         _LOGGER.debug("config_flow.py:MaxStorageFlowHandler.maxstorage_ultimate_init")
 
+        client = MaxStorageClient(self._host, self._user, self._password)
         try:
-            client = MaxStorageClient(self._host, self._user, self._password)
             await client.get_data()
             await self.async_set_unique_id(client.get_device_info()["Ident"])
-            await client.close()
         except AuthenticationFailedError:
             return ERROR_AUTH_INVALID
         except InvalidHostError:
@@ -62,6 +64,8 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         except Exception as e:  # pylint: disable=broad-except
             _LOGGER.error("Unexpected exception: %s", e)
             return ERROR_UNKNOWN
+        finally:
+            await client.close()
 
         return None
 
@@ -218,15 +222,11 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         config_entry: ConfigEntry,
     ) -> MaxStorageOptionsFlowHandler:
         """Get the options flow for this handler."""
-        return MaxStorageOptionsFlowHandler(config_entry)
+        return MaxStorageOptionsFlowHandler()
 
 
 class MaxStorageOptionsFlowHandler(OptionsFlow):
     """Handle MaxStorage options."""
-
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize MaxStorage options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -257,6 +257,13 @@ class MaxStorageOptionsFlowHandler(OptionsFlow):
                         self.config_entry.data[CONF_STORAGE_PASSWORD],
                     ),
                 ): str,
+                vol.Required(
+                    CONF_SCAN_INTERVAL,
+                    default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                ): vol.All(
+                    vol.Coerce(int),
+                    vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
+                ),
             }
         )
 

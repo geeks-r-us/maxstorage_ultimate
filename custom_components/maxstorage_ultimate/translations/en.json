@@ -8,7 +8,9 @@
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_host": "Invalid hostname or IP address",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "invalid_auth": "Invalid username or password",
+      "already_configured": "Device is already configured"
     },
     "flow_title": "{name}",
     "step": {
@@ -52,6 +54,19 @@
       },
       "storage_dc_power": {
         "name": "Storage DC Power"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Max.Storage Ultimate settings",
+        "data": {
+          "maxstorage_host": "Host (ip or hostname)",
+          "maxstorage_user": "Username",
+          "maxstorage_password": "Password",
+          "scan_interval": "Update interval in seconds (5-3600)"
+        }
       }
     }
   }

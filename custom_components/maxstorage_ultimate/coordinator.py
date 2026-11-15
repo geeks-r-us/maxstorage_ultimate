@@ -7,7 +7,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .client import MaxStorageClient
-from .const import DOMAIN
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,14 +15,19 @@ _LOGGER = logging.getLogger(__name__)
 class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
 
-    def __init__(self, hass: HomeAssistant, client: MaxStorageClient) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: MaxStorageClient,
+        scan_interval: int = DEFAULT_SCAN_INTERVAL,
+    ) -> None:
         """Initialize."""
         self.api = client
         super().__init__(
             hass=hass,
             logger=_LOGGER,
             name=f"{DOMAIN}-{client.mac}-coordinator",
-            update_interval=timedelta(minutes=0.1),
+            update_interval=timedelta(seconds=scan_interval),
         )
 
     async def _async_update_data(self):
@@ -50,13 +55,3 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
         if self.api.mac:
             di["connections"] = {(dr.CONNECTION_NETWORK_MAC, self.api.mac)}
         return di
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique ID."""
-        return self._unique_id
-
-    @property
-    def mac(self) -> str:
-        """Return the MAC address."""
-        return dr.format_mac(self._unique_id)

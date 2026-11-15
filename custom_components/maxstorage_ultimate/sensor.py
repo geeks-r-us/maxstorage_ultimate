@@ -146,8 +146,8 @@ SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
     ),
     MaxStorageSensorDescription(
-        key="storage_dc_power",
-        translation_key="storageDCPower",
+        key="storageDCPower",
+        translation_key="storage_dc_power",
         icon="mdi:solar-power",
         value_fn=lambda data: data["storageDCPower"],
         native_unit_of_measurement=UnitOfPower.WATT,

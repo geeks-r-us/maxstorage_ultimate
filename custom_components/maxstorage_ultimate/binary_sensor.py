@@ -38,12 +38,10 @@ async def async_setup_entry(
     for index, name in enumerate(names):
         if name:  # Only add sensors for relays with a name
             description = MaxStorageBinarySensorDescription(
-                key="relais_{name}",
+                key=f"relais_{index}",
                 icon="mdi:power-plug",
                 device_class=BinarySensorDeviceClass.POWER,
-                value_fn=lambda data, idx=index: bool(
-                    data.get("Relais", {}).get("value", [])[idx]
-                ),
+                value_fn=lambda data, idx=index: _relais_state(data, idx),
                 name=name,
             )
 
@@ -51,6 +49,14 @@ async def async_setup_entry(
             sensors.append(sensor)
 
     async_add_entities(sensors)
+
+
+def _relais_state(data: dict[str, Any], idx: int) -> bool | None:
+    """Return the state of relais idx, or None if the value is unavailable."""
+    values = (data or {}).get("Relais", {}).get("value", [])
+    if idx >= len(values):
+        return None
+    return bool(values[idx])
 
 
 @dataclass(frozen=True)
@@ -86,7 +92,7 @@ class MaxStorageBinarySensor(
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = (
-            f"{coordinator.api.device_info['Ident']}_{description.name}"
+            f"{coordinator.api.device_info['Ident']}_{description.key}"
         )
         self._attr_device_info = coordinator.device_info
 
