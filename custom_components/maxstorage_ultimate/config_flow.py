@@ -1,6 +1,7 @@
 """Config flow for MaxStorage integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import socket
 from typing import Any
@@ -17,6 +18,7 @@ from .client import (
     AuthenticationFailedError,
     InvalidHostError,
     MaxStorageClient,
+    is_swarm_worker,
     normalize_host,
 )
 from .const import (
@@ -31,6 +33,7 @@ from .const import (
     DOMAIN,
     ERROR_AUTH_INVALID,
     ERROR_CANNOT_CONNECT,
+    ERROR_SWARM_WORKER,
     ERROR_UNKNOWN,
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
@@ -38,6 +41,8 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+PROBE_TIMEOUT = 10  # seconds
 
 
 class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
@@ -60,7 +65,9 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
 
         client = MaxStorageClient(self._host, self._user, self._password)
         try:
-            await client.get_data()
+            data = await client.get_data()
+            if is_swarm_worker(data):
+                return ERROR_SWARM_WORKER
             await self.async_set_unique_id(client.get_device_info()["Ident"])
         except AuthenticationFailedError:
             return ERROR_AUTH_INVALID
@@ -73,6 +80,21 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
             await client.close()
 
         return None
+
+    async def _async_is_swarm_worker(self) -> bool:
+        """Check a discovered device with the default credentials for its role.
+
+        Only the publicly documented default credentials are sent, never the
+        ones of an existing entry. Any failure means "unknown" (not a worker).
+        """
+        client = MaxStorageClient(self._host, DEFAULT_USER, DEFAULT_PASSWORD)
+        try:
+            async with asyncio.timeout(PROBE_TIMEOUT):
+                return is_swarm_worker(await client.get_data())
+        except Exception:  # pylint: disable=broad-except
+            return False
+        finally:
+            await client.close()
 
     async def async_check_configured_entry(self) -> ConfigEntry | None:
         """Check if entry is configured."""
@@ -155,6 +177,10 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
                 self.hass.config_entries.async_update_entry(entry, unique_id=uuid)
             return self.async_abort(reason="already_configured")
 
+        # Workers are part of the master's data; do not offer them as devices.
+        if await self._async_is_swarm_worker():
+            return self.async_abort(reason=ERROR_SWARM_WORKER)
+
         self.context.update(
             {
                 "title_placeholders": {"name": self._name},
@@ -180,6 +206,8 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
 
         error = await self.maxstorage_ultimate_init()
 
+        if error == ERROR_SWARM_WORKER:
+            return self.async_abort(reason=ERROR_SWARM_WORKER)
         if error:
             return self._show_setup_form_confirm({"base": error})
 

@@ -1,4 +1,6 @@
 """Tests for the config flow and options flow."""
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries
@@ -247,3 +249,102 @@ async def test_options_flow_normalizes_host(hass: HomeAssistant):
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options["maxstorage_host"] == "192.168.123.3"
+
+
+WORKER = json.loads((Path(__file__).parent / "fixtures" / "swarm_worker.json").read_text())
+MASTER = json.loads((Path(__file__).parent / "fixtures" / "swarm_master.json").read_text())
+
+
+async def test_user_flow_rejects_swarm_worker(hass: HomeAssistant, mock_client):
+    mock_client.get_data.return_value = WORKER
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "swarm_worker"}
+    mock_client.close.assert_awaited()
+
+    # entering the master instead works
+    mock_client.get_data.return_value = MASTER
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_zeroconf_worker_is_not_offered(hass: HomeAssistant, mock_client):
+    mock_client.get_data.return_value = WORKER
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_ZEROCONF},
+        data=_zeroconf_info(),
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "swarm_worker"
+
+
+async def test_zeroconf_master_is_offered(hass: HomeAssistant, mock_client):
+    mock_client.get_data.return_value = MASTER
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_ZEROCONF},
+        data=_zeroconf_info(),
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "confirm"
+
+
+async def test_zeroconf_unknown_role_is_still_offered(hass: HomeAssistant, mock_client):
+    """With changed credentials the probe fails; the device must still be offered."""
+    mock_client.get_data.side_effect = AuthenticationFailedError("bad")
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_ZEROCONF},
+        data=_zeroconf_info(),
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "confirm"
+    mock_client.close.assert_awaited()
+
+
+async def test_zeroconf_confirm_with_worker_aborts(hass: HomeAssistant, mock_client):
+    # the probe with default credentials fails, the entered credentials work
+    mock_client.get_data.side_effect = [AuthenticationFailedError("bad"), WORKER]
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_ZEROCONF},
+        data=_zeroconf_info(),
+    )
+    assert result["step_id"] == "confirm"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"maxstorage_user": "me", "maxstorage_password": "custom"},
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "swarm_worker"
+
+
+async def test_zeroconf_probe_only_sends_default_credentials(hass: HomeAssistant):
+    """Credentials of existing entries must never be sent to a discovered host."""
+    MockConfigEntry(
+        domain=DOMAIN,
+        data={**USER_INPUT, "maxstorage_user": "secret-user", "maxstorage_password": "secret-pw"},
+        unique_id="other",
+    ).add_to_hass(hass)
+
+    with patch(
+        "custom_components.maxstorage_ultimate.config_flow.MaxStorageClient"
+    ) as cls:
+        cls.return_value.get_data = AsyncMock(return_value=MASTER)
+        cls.return_value.close = AsyncMock()
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=_zeroconf_info(),
+        )
+
+    cls.assert_called_once_with("maxstorage-abc.local", "user", "solarmax.com")

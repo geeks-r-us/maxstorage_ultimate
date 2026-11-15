@@ -50,7 +50,9 @@ Add only the **master**. Its response contains the data of every worker, so no s
 - Grid and usage values are system-wide (measured at the master) and are only available on the master device.
 - The values of the master device are the master's own values.
 
-Workers that appear later are added automatically. Workers are not listed as separate discoverable devices; do not add them as a second integration entry.
+Workers that appear later are added automatically.
+
+Workers are not offered as separate devices: when a discovered device reports itself as a swarm worker (`Swarming.swarmJob` = `worker`), the discovery is dropped silently. To detect this, a discovered device is queried once with the default credentials (`user` / `solarmax.com`); credentials of existing entries are never sent. If you try to add a worker manually, the setup tells you to add the master instead.
 
 ## Diagnostics
 

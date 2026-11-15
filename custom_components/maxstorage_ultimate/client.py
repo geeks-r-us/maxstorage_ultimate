@@ -24,6 +24,16 @@ def normalize_host(host: str) -> str:
     return host.split("/", 1)[0].strip()
 
 
+def is_swarm_worker(data: object) -> bool:
+    """Return True if the device response comes from a swarm worker.
+
+    The master reports ``Swarming.swarmJob == "master"`` and contains the data
+    of all workers; a worker only reports ``"worker"``.
+    """
+    swarming = data.get("Swarming") if isinstance(data, dict) else None
+    return isinstance(swarming, dict) and swarming.get("swarmJob") == "worker"
+
+
 class MaxStorageClient:
     """Client for interacting with the MaxStorage web service."""
 

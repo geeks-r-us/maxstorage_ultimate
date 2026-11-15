@@ -1,0 +1,81 @@
+{
+  "energyValTimeStamp": "2026-11-15T21:03:25Z",
+  "deviceTyp": "mc2",
+  "plantPower": 0,
+  "storageDCPower": 0,
+  "storageMPPT1Power": 0,
+  "storageMPPT2Power": 0,
+  "usagePower": "0",
+  "gridPower": "0",
+  "batteryPower": -523,
+  "batteryCapacity": 12000,
+  "batterySoC": 7.1,
+  "MaxRemotePercent": "-",
+  "systemState": "1",
+  "energyFlowVersion": "v2",
+  "SpecialState": {
+    "deviceInUpdate": "false",
+    "dcSwitchOff": "false",
+    "gridCodeUnknown": "false",
+    "inWinterMode": "false",
+    "inBMZEqualization": "false",
+    "inPeakShaving": "false",
+    "inOptimizationLimit": "false",
+    "inBatteryCalibration": "false",
+    "noPowerMeter": "false",
+    "gridError": "false",
+    "gridLocked": "false",
+    "islandActive": "false",
+    "serviceMode": "false",
+    "uzkState": 0
+  },
+  "Relais": {
+    "name": [
+      "",
+      "",
+      "",
+      ""
+    ],
+    "mode": [
+      "auto",
+      "auto",
+      "auto",
+      "auto"
+    ],
+    "value": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "SmartHeater": {
+    "enabled": "false",
+    "active": "false",
+    "vendor": "defaultvendor",
+    "error": "false",
+    "power": 0,
+    "mode": "auto"
+  },
+  "Wallbox": {
+    "enabled": "false",
+    "allowed": "false",
+    "mode": "auto",
+    "error": "false",
+    "power": 0
+  },
+  "Debug": {
+    "emRuntime": "173",
+    "fanspeed0": "0",
+    "fanspeed1": "0",
+    "digitalInputs": 0,
+    "wrSetPower": "0",
+    "wrStatus": "Netzbetrieb",
+    "fcSetPower": "-1299",
+    "MaxChargePower": "6675",
+    "MaxDischargePower": "-3350"
+  },
+  "Swarming": {
+    "swarmJob": "worker"
+  }
+}

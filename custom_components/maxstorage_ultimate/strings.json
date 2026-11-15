@@ -3,14 +3,16 @@
     "abort": {
       "already_configured": "Device is already configured",
       "already_in_progress": "Configuration flow is already in progress",
-      "ignore_ip6_link_local": "IPv6 link local address is not supported."
+      "ignore_ip6_link_local": "IPv6 link local address is not supported.",
+      "swarm_worker": "This device is a swarm worker. Please add the master instead; the data of all workers is included automatically."
     },
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_host": "Invalid hostname or IP address",
       "unknown": "Unexpected error",
       "invalid_auth": "Invalid username or password",
-      "already_configured": "Device is already configured"
+      "already_configured": "Device is already configured",
+      "swarm_worker": "This device is a swarm worker. Please add the master instead; the data of all workers is included automatically."
     },
     "flow_title": "{name}",
     "step": {

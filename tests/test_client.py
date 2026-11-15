@@ -12,6 +12,7 @@ from custom_components.maxstorage_ultimate.client import (
     HTTPError,
     InvalidHostError,
     MaxStorageClient,
+    is_swarm_worker,
     normalize_host,
 )
 
@@ -190,3 +191,19 @@ async def test_client_uses_normalized_host():
         assert c.login_url == "http://192.168.123.3/home.php"
     finally:
         await c.close()
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        ({"Swarming": {"swarmJob": "worker"}}, True),
+        ({"Swarming": {"swarmJob": "master", "worker1": {}}}, False),
+        ({"Swarming": {}}, False),
+        ({"Swarming": "worker"}, False),
+        ({}, False),
+        (None, False),
+        ([], False),
+    ],
+)
+def test_is_swarm_worker(data, expected):
+    assert is_swarm_worker(data) is expected
