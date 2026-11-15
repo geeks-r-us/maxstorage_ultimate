@@ -7,8 +7,8 @@ import logging
 from typing import Any
 
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
     RestoreSensor,
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
@@ -16,11 +16,12 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import MaxStorageDataUpdateCoordinator
+from .coordinator import WORKER_KEY, MaxStorageDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +42,26 @@ async def async_setup_entry(
         for description in ENERGY_SENSOR_TYPES
     )
     async_add_entities(sensors)
+
+    # Swarm: the master response contains the data of every worker. Workers get
+    # their own device, plus one "swarm" device with the sums over all devices.
+    known_workers: set[str] = set()
+
+    @callback
+    def _add_swarm_entities() -> None:
+        new = [key for key in coordinator.workers if key not in known_workers]
+        if not new:
+            return
+        entities: list[MaxStorageSensor] = []
+        if not known_workers:
+            entities.extend(_swarm_sensors(coordinator))
+        for key in new:
+            known_workers.add(key)
+            entities.extend(_worker_sensors(coordinator, key))
+        async_add_entities(entities)
+
+    _add_swarm_entities()
+    config.async_on_unload(coordinator.async_add_listener(_add_swarm_entities))
 
 
 @dataclass(frozen=True)
@@ -71,24 +92,40 @@ class MaxStorageSensor(
         self,
         coordinator: MaxStorageDataUpdateCoordinator,
         description: MaxStorageSensorDescription,
+        *,
+        scope: str = "",
+        data_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        device_info: DeviceInfo | None = None,
     ) -> None:
-        """Initialize the sensor."""
+        """Initialize the sensor.
+
+        scope prefixes the unique id ("worker1_", "swarm_"), data_fn selects the
+        part of the coordinator data the sensor reads (default: the master).
+        """
         super().__init__(coordinator)
         self.entity_description = description
+        self._data_fn = data_fn or (lambda data: data)
         self._attr_unique_id = (
-            f"{coordinator.api.device_info['Ident']}_{description.translation_key}"
+            f"{coordinator.api.device_info['Ident']}_{scope}{description.translation_key}"
         )
-        self._attr_device_info = coordinator.device_info
+        self._attr_device_info = device_info or coordinator.device_info
+
+    def _device_data(self) -> dict[str, Any]:
+        """Return the data of the device (master, worker or swarm) of this sensor."""
+        return self._data_fn(self.coordinator.data) or {}
 
     @property
     def native_value(self) -> str | int | float | None:
         """Return the state of the sensor."""
-        return self.entity_description.value_fn(self.coordinator.data)
+        try:
+            return self.entity_description.value_fn(self._device_data())
+        except (KeyError, TypeError):
+            return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes of the sensor."""
-        return self.entity_description.attr_fn(self.coordinator.data)
+        return self.entity_description.attr_fn(self._device_data())
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -114,9 +151,10 @@ class MaxStorageEnergySensor(MaxStorageSensor, RestoreSensor):
         self,
         coordinator: MaxStorageDataUpdateCoordinator,
         description: MaxStorageSensorDescription,
+        **kwargs: Any,
     ) -> None:
         """Initialize the energy sensor."""
-        super().__init__(coordinator, description)
+        super().__init__(coordinator, description, **kwargs)
         self._energy_kwh: float = 0.0
         self._last_power: float | None = None
         self._last_time = None
@@ -135,15 +173,22 @@ class MaxStorageEnergySensor(MaxStorageSensor, RestoreSensor):
             self._energy_kwh = float(last.native_value)
         self._start_sample()
 
+    def _power(self) -> float | None:
+        """Return the power (W) to integrate, or None if unavailable."""
+        try:
+            return self.entity_description.value_fn(self._device_data())
+        except (KeyError, TypeError):
+            return None
+
     def _start_sample(self) -> None:
         """Remember the current power as the start of the next interval."""
-        self._last_power = self.entity_description.value_fn(self.coordinator.data)
+        self._last_power = self._power()
         self._last_time = dt_util.utcnow() if self._last_power is not None else None
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Integrate the power since the previous update."""
-        power = self.entity_description.value_fn(self.coordinator.data)
+        power = self._power()
         now = dt_util.utcnow()
         max_gap = 3 * (self.coordinator.update_interval.total_seconds())
 
@@ -342,3 +387,101 @@ ENERGY_SENSOR_TYPES: tuple[MaxStorageSensorDescription, ...] = (
     ),
 )
 
+
+# Sensors that exist per worker / for the whole swarm. Grid and usage values are
+# system-wide (measured at the master), so they are not repeated.
+WORKER_SENSOR_KEYS = {
+    "batterySoC",
+    "batteryCapacity",
+    "batteryPower",
+    "batteryChargePower",
+    "batteryDischargePower",
+    "plantPower",
+    "storageDCPower",
+}
+WORKER_ENERGY_KEYS = {"batteryChargeEnergy", "batteryDischargeEnergy", "plantEnergy"}
+SWARM_SENSOR_KEYS = WORKER_SENSOR_KEYS - {"storageDCPower"}
+SWARM_ENERGY_KEYS = {"batteryChargeEnergy", "batteryDischargeEnergy"}
+
+
+def swarm_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Return the sums over the master and all workers.
+
+    batteryPower, batteryCapacity and plantPower are added up, the state of
+    charge is weighted by the capacity of each battery.
+    """
+    swarming = data.get("Swarming")
+    devices: list[dict[str, Any]] = [data]
+    if isinstance(swarming, dict):
+        devices += [
+            value
+            for key, value in swarming.items()
+            if WORKER_KEY.match(key) and isinstance(value, dict)
+        ]
+
+    def total(key: str) -> float | None:
+        values = [v for d in devices if (v := _number(d, key)) is not None]
+        return sum(values) if values else None
+
+    result: dict[str, Any] = {
+        "batteryPower": total("batteryPower"),
+        "batteryCapacity": total("batteryCapacity"),
+        "plantPower": total("plantPower"),
+    }
+    weighted = [
+        (soc, capacity)
+        for d in devices
+        if (soc := _number(d, "batterySoC")) is not None
+        and (capacity := _number(d, "batteryCapacity"))
+    ]
+    capacity_sum = sum(capacity for _, capacity in weighted)
+    result["batterySoC"] = (
+        round(sum(soc * capacity for soc, capacity in weighted) / capacity_sum, 2)
+        if capacity_sum
+        else None
+    )
+    return result
+
+
+def _worker_sensors(
+    coordinator: MaxStorageDataUpdateCoordinator, key: str
+) -> list[MaxStorageSensor]:
+    """Create the sensors of one worker."""
+    options = {
+        "scope": f"{key}_",
+        "data_fn": lambda data, key=key: (data.get("Swarming") or {}).get(key),
+        "device_info": coordinator.worker_device_info(key),
+    }
+    sensors: list[MaxStorageSensor] = [
+        MaxStorageSensor(coordinator, d, **options)
+        for d in SENSOR_TYPES
+        if d.key in WORKER_SENSOR_KEYS
+    ]
+    sensors += [
+        MaxStorageEnergySensor(coordinator, d, **options)
+        for d in ENERGY_SENSOR_TYPES
+        if d.key in WORKER_ENERGY_KEYS
+    ]
+    return sensors
+
+
+def _swarm_sensors(
+    coordinator: MaxStorageDataUpdateCoordinator,
+) -> list[MaxStorageSensor]:
+    """Create the sensors with the sums over the whole swarm."""
+    options = {
+        "scope": "swarm_",
+        "data_fn": swarm_data,
+        "device_info": coordinator.swarm_device_info,
+    }
+    sensors: list[MaxStorageSensor] = [
+        MaxStorageSensor(coordinator, d, **options)
+        for d in SENSOR_TYPES
+        if d.key in SWARM_SENSOR_KEYS
+    ]
+    sensors += [
+        MaxStorageEnergySensor(coordinator, d, **options)
+        for d in ENERGY_SENSOR_TYPES
+        if d.key in SWARM_ENERGY_KEYS
+    ]
+    return sensors

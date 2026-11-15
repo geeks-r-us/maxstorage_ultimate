@@ -41,6 +41,17 @@ Host, credentials and the update interval (5–3600 s, default 30 s) can be chan
 | Sensor | Plant Energy | kWh (integrated, for the energy dashboard) |
 | Binary sensor | One per named relais | on/off |
 
+## Swarm (master with workers)
+
+Add only the **master**. Its response contains the data of every worker, so no second connection is needed:
+
+- Each worker (`worker1`, `worker2`, …) appears as its own device *MaxStorageUltimate Worker N* with battery, PV and DC sensors (power and energy).
+- A device *MaxStorageUltimate Swarm* shows the sums over the master and all workers: battery power, charge/discharge power and energy, total capacity, capacity-weighted state of charge and PV power.
+- Grid and usage values are system-wide (measured at the master) and are only available on the master device.
+- The values of the master device are the master's own values.
+
+Workers that appear later are added automatically. Workers are not listed as separate discoverable devices; do not add them as a second integration entry.
+
 ## Diagnostics
 
 For bug reports or new firmware/swarm setups, use *Settings → Devices & services → Max.Storage Ultimate → ⋮ → Download diagnostics*. The file contains the raw device response; host, credentials, name, serial number and MAC address are redacted. Please check it before attaching it to an issue.
