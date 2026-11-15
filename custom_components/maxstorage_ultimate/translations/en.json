@@ -8,7 +8,9 @@
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_host": "Invalid hostname or IP address",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "invalid_auth": "Invalid username or password",
+      "already_configured": "Device is already configured"
     },
     "flow_title": "{name}",
     "step": {
