@@ -39,7 +39,13 @@ def client_cls():
 
 async def test_energy_starts_at_zero(hass: HomeAssistant, client_cls):
     await _setup(hass, _entry())
-    for key in ("battery_charge_energy", "battery_discharge_energy", "plant_energy"):
+    for key in (
+        "battery_charge_energy",
+        "battery_discharge_energy",
+        "grid_import_energy",
+        "grid_export_energy",
+        "plant_energy",
+    ):
         assert float(hass.states.get(_entity_id(hass, key)).state) == 0.0
 
 
@@ -107,6 +113,21 @@ async def test_total_is_restored(hass: HomeAssistant, client_cls):
     )
     await _setup(hass, _entry())
     assert float(hass.states.get(_entity_id(hass, "plant_energy")).state) == 12.5
+
+
+async def test_grid_energy_split(hass: HomeAssistant, client_cls, freezer):
+    entry = _entry()
+    entry.add_to_hass(hass)
+    client_cls.side_effect = lambda *a, **k: _make_client_with(gridPower=-1000)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # drawing 1000 W from the grid for 30 s = 8.333 Wh imported, nothing exported
+    await _refresh(hass, entry, freezer, 30, gridPower=-1000)
+    imported = hass.states.get(_entity_id(hass, "grid_import_energy"))
+    exported = hass.states.get(_entity_id(hass, "grid_export_energy"))
+    assert float(imported.state) == pytest.approx(0.008333, abs=1e-6)
+    assert float(exported.state) == 0.0
 
 
 def _make_client_with(**overrides):

@@ -50,6 +50,12 @@
       "grid_power": {
         "name": "Netzleistung"
       },
+      "grid_import_power": {
+        "name": "Netzbezug Leistung"
+      },
+      "grid_export_power": {
+        "name": "Netzeinspeisung Leistung"
+      },
       "usage_power": {
         "name": "Energieverbrauch"
       },
@@ -67,6 +73,12 @@
       },
       "plant_energy": {
         "name": "PV-Energie"
+      },
+      "grid_import_energy": {
+        "name": "Netzbezug Energie"
+      },
+      "grid_export_energy": {
+        "name": "Netzeinspeisung Energie"
       }
     }
   },

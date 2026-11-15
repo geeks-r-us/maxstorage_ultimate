@@ -52,6 +52,12 @@
       "grid_power": {
         "name": "Grid Power"
       },
+      "grid_import_power": {
+        "name": "Grid Import Power"
+      },
+      "grid_export_power": {
+        "name": "Grid Export Power"
+      },
       "usage_power": {
         "name": "Usage Power"
       },
@@ -69,6 +75,12 @@
       },
       "plant_energy": {
         "name": "Plant Energy"
+      },
+      "grid_import_energy": {
+        "name": "Grid Import Energy"
+      },
+      "grid_export_energy": {
+        "name": "Grid Export Energy"
       }
     }
   },
