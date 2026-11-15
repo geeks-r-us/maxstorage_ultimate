@@ -2,6 +2,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
 from .client import MaxStorageClient
 from .const import (
@@ -61,6 +62,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         await client.close()
         raise
+
+    # Workers and the swarm refer to the master with via_device, so it has to exist.
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **coordinator.device_info
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
