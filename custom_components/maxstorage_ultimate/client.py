@@ -24,6 +24,41 @@ def normalize_host(host: str) -> str:
     return host.split("/", 1)[0].strip()
 
 
+def get_mac_address(ip_address):
+    """Get the MAC address of the host."""
+
+    if os.name == "nt":  # Windows
+        ping_cmd = ["ping", "-n", "1", ip_address]
+        cmd = ["arp", "-a"]
+
+    else:  # Unix-based
+        ping_cmd = ["ping", "-c", "1", ip_address]
+        cmd = ["arp", "-a", ip_address]
+
+    try:
+        output = subprocess.check_output(
+            ping_cmd, text=True, timeout=10
+        )  # Ping the host to ensure it's in the ARP table
+        _LOGGER.debug(output)
+        output = subprocess.check_output(cmd, text=True, timeout=10)
+        _LOGGER.debug(output)
+        # Use regex to find the MAC address
+        result = re.search(r"([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})", output)
+        if result:
+            _LOGGER.debug("Found MAC: %s", result.group())
+            return result.group()  # MAC address
+        return None
+    except subprocess.CalledProcessError as ex:
+        _LOGGER.error("Error getting MAC address: %s", ex)
+        return None
+    except subprocess.TimeoutExpired as ex:
+        _LOGGER.error("Timeout getting MAC address: %s", ex)
+        return None
+    except FileNotFoundError as ex:
+        _LOGGER.error("Error getting MAC address: %s", ex)
+        return None
+
+
 def is_swarm_worker(data: object) -> bool:
     """Return True if the device response comes from a swarm worker.
 
@@ -77,37 +112,7 @@ class MaxStorageClient:
 
     def get_mac_address(self, ip_address):
         """Get the MAC address of the host."""
-
-        if os.name == "nt":  # Windows
-            ping_cmd = ["ping", "-n", "1", ip_address]
-            cmd = ["arp", "-a"]
-
-        else:  # Unix-based
-            ping_cmd = ["ping", "-c", "1", ip_address]
-            cmd = ["arp", "-a", ip_address]
-
-        try:
-            output = subprocess.check_output(
-                ping_cmd, text=True, timeout=10
-            )  # Ping the host to ensure it's in the ARP table
-            _LOGGER.debug(output)
-            output = subprocess.check_output(cmd, text=True, timeout=10)
-            _LOGGER.debug(output)
-            # Use regex to find the MAC address
-            result = re.search(r"([0-9a-fA-F]{2}[:-]){5}([0-9a-fA-F]{2})", output)
-            if result:
-                _LOGGER.debug("Found MAC: %s", result.group())
-                return result.group()  # MAC address
-            return None
-        except subprocess.CalledProcessError as ex:
-            _LOGGER.error("Error getting MAC address: %s", ex)
-            return None
-        except subprocess.TimeoutExpired as ex:
-            _LOGGER.error("Timeout getting MAC address: %s", ex)
-            return None
-        except FileNotFoundError as ex:
-            _LOGGER.error("Error getting MAC address: %s", ex)
-            return None
+        return get_mac_address(ip_address)
 
     async def ensure_authenticated(self):
         """Ensure that the session is authenticated."""

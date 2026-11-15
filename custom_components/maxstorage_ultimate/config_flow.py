@@ -21,6 +21,7 @@ from .client import (
     is_swarm_worker,
     normalize_host,
 )
+from .swarm import async_attribute_worker, is_known_worker
 from .const import (
     CONF_SCAN_INTERVAL,
     CONF_STORAGE_HOST,
@@ -81,18 +82,19 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
 
         return None
 
-    async def _async_is_swarm_worker(self) -> bool:
-        """Check a discovered device with the default credentials for its role.
+    async def _async_probe(self) -> Any:
+        """Query a discovered device with the default credentials.
 
         Only the publicly documented default credentials are sent, never the
-        ones of an existing entry. Any failure means "unknown" (not a worker).
+        ones of an existing entry. Returns the response, or None if the device
+        could not be queried (unknown role).
         """
         client = MaxStorageClient(self._host, DEFAULT_USER, DEFAULT_PASSWORD)
         try:
             async with asyncio.timeout(PROBE_TIMEOUT):
-                return is_swarm_worker(await client.get_data())
+                return await client.get_data()
         except Exception:  # pylint: disable=broad-except
-            return False
+            return None
         finally:
             await client.close()
 
@@ -178,7 +180,15 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
 
         # Workers are part of the master's data; do not offer them as devices.
-        if await self._async_is_swarm_worker():
+        # Instead, use the discovery to add their MAC address to the worker device.
+        if uuid and is_known_worker(self.hass, uuid):
+            return self.async_abort(reason=ERROR_SWARM_WORKER)
+        data = await self._async_probe()
+        if is_swarm_worker(data):
+            if uuid:
+                await async_attribute_worker(
+                    self.hass, data, uuid, discovery_info.host
+                )
             return self.async_abort(reason=ERROR_SWARM_WORKER)
 
         self.context.update(
