@@ -8,6 +8,7 @@ so that e.g. the UniFi integration can merge it with the network client.
 """
 from __future__ import annotations
 
+from ipaddress import ip_address
 import logging
 from typing import Any
 
@@ -21,6 +22,26 @@ _LOGGER = logging.getLogger(__name__)
 
 SOC_TOLERANCE = 1.0  # percent
 POWER_TOLERANCE = 150.0  # watt, the master data is up to one poll old
+
+
+def pick_ipv4(discovery_info: Any) -> str:
+    """Return the IPv4 address of a discovered device (fallback: its host).
+
+    Home Assistant reports the most recently updated address as host, which may
+    be an IPv6 address; the MAC lookup via arp only works with IPv4.
+    """
+    addresses = []
+    for candidate in getattr(discovery_info, "ip_addresses", None) or []:
+        try:
+            address = ip_address(str(candidate))
+        except ValueError:
+            continue
+        if address.version == 4:
+            addresses.append(address)
+    for address in addresses:
+        if not address.is_link_local and not address.is_unspecified:
+            return str(address)
+    return str(addresses[0]) if addresses else discovery_info.host
 
 
 def _num(data: dict[str, Any], key: str) -> float | None:
@@ -85,6 +106,12 @@ async def async_attribute_worker(
 ) -> bool:
     """Add MAC address and hostname to the worker device that matches worker_data."""
     registry = dr.async_get(hass)
+    _LOGGER.debug(
+        "Discovered worker %s (%s): looking for a match among %d configured entries",
+        ident,
+        ip,
+        len(hass.data.get(DOMAIN, {})),
+    )
     for entry_id, runtime in hass.data.get(DOMAIN, {}).items():
         coordinator = runtime["coordinator"]
         master = coordinator.api.device_info["Ident"]
@@ -107,6 +134,13 @@ async def async_attribute_worker(
 
         key = match_worker(candidates, worker_data)
         if key is None:
+            _LOGGER.debug(
+                "Discovered worker %s matches none of the unassigned workers %s "
+                "of entry %s",
+                ident,
+                sorted(candidates),
+                master,
+            )
             continue
 
         mac = await hass.async_add_executor_job(get_mac_address, ip)

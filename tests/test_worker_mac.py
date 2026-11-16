@@ -13,7 +13,7 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
 
 from custom_components.maxstorage_ultimate.const import DOMAIN
-from custom_components.maxstorage_ultimate.swarm import match_worker
+from custom_components.maxstorage_ultimate.swarm import match_worker, pick_ipv4
 
 from .test_init import _entry, _make_client, _setup
 
@@ -247,3 +247,56 @@ async def test_mac_of_another_integration_is_linked(hass: HomeAssistant):
     else:
         # older Home Assistant: the connection belongs to the other device, skipped
         assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) not in device.connections
+
+
+def _info_with(*addresses, host=None):
+    from ipaddress import ip_address
+
+    parsed = [ip_address(a) for a in addresses]
+    return ZeroconfServiceInfo(
+        ip_address=parsed[0],
+        ip_addresses=parsed,
+        hostname="maxstorage-w1.local.",
+        name="Worker._maxstorage._tcp.local.",
+        port=80,
+        properties={},
+        type="_maxstorage._tcp.local.",
+    )
+
+
+@pytest.mark.parametrize(
+    ("addresses", "expected"),
+    [
+        (["192.168.1.60"], "192.168.1.60"),
+        (["2001:db8::60", "192.168.1.60"], "192.168.1.60"),  # IPv6 is the host
+        (["fd00::60", "169.254.3.4", "192.168.1.60"], "192.168.1.60"),
+        (["2001:db8::60", "169.254.3.4"], "169.254.3.4"),  # only link-local IPv4
+        (["2001:db8::60"], "2001:db8::60"),  # no IPv4 at all: fall back to the host
+    ],
+)
+def test_pick_ipv4(addresses, expected):
+    assert pick_ipv4(_info_with(*addresses)) == expected
+
+
+async def test_ipv6_host_still_uses_the_ipv4_for_the_mac(hass: HomeAssistant):
+    entry = await _setup_master(hass, MASTER)
+    info = _info_with("2001:db8::60", "192.168.1.60")
+
+    with (
+        patch("custom_components.maxstorage_ultimate.config_flow.MaxStorageClient") as cls,
+        patch("custom_components.maxstorage_ultimate.swarm.get_mac_address", return_value=WORKER_MAC) as lookup,
+        patch(
+            "custom_components.maxstorage_ultimate.config_flow.socket.gethostbyname",
+            side_effect=socket.gaierror,
+        ),
+    ):
+        client = MagicMock()
+        client.get_data = AsyncMock(return_value=WORKER)
+        client.close = AsyncMock()
+        cls.return_value = client
+        await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_ZEROCONF}, data=info
+        )
+
+    lookup.assert_called_once_with("192.168.1.60")
+    assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in _worker_device(hass, entry).connections

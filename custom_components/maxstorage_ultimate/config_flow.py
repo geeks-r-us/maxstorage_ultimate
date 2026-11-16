@@ -21,7 +21,7 @@ from .client import (
     is_swarm_worker,
     normalize_host,
 )
-from .swarm import async_attribute_worker, is_known_worker
+from .swarm import async_attribute_worker, is_known_worker, pick_ipv4
 from .const import (
     CONF_SCAN_INTERVAL,
     CONF_STORAGE_HOST,
@@ -187,9 +187,15 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         if is_swarm_worker(data):
             if uuid:
                 await async_attribute_worker(
-                    self.hass, data, uuid, discovery_info.host
+                    self.hass, data, uuid, pick_ipv4(discovery_info)
                 )
             return self.async_abort(reason=ERROR_SWARM_WORKER)
+        _LOGGER.debug(
+            "Discovered %s is not a swarm worker or could not be queried with the "
+            "default credentials (probe result: %s)",
+            self._host,
+            "no data" if data is None else "master/standalone",
+        )
 
         self.context.update(
             {
