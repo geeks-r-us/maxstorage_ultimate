@@ -6,7 +6,8 @@
       "ignore_ip6_link_local": "IPv6 link local address is not supported.",
       "swarm_worker": "This device is a swarm worker. Please add the master instead; the data of all workers is included automatically.",
       "reauth_successful": "The credentials were updated.",
-      "worker_saved": "The credentials of the swarm worker were saved for its master. Its values are read from now on."
+      "worker_saved": "The credentials of the swarm worker were saved for its master. Its values are read from now on.",
+      "worker_login_required": "The credentials of this swarm worker are no longer valid. Use Reconfigure on the Max.Storage Ultimate integration to enter them."
     },
     "error": {
       "cannot_connect": "Failed to connect",

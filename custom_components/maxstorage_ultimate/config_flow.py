@@ -22,7 +22,7 @@ from .client import (
     is_swarm_worker,
     normalize_host,
 )
-from .swarm import async_attribute_worker, is_known_worker
+from .swarm import async_attribute_worker, close_worker_prompts, is_known_worker
 from .workers import HOST, IDENT, PASSWORD, USER, stored_credentials, stored_workers
 from .const import (
     CONF_SCAN_INTERVAL,
@@ -220,6 +220,10 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         user = stored[USER] if stored else DEFAULT_USER
         password = stored[PASSWORD] if stored else DEFAULT_PASSWORD
         data, device_info, overview = await self._async_probe(user, password)
+        if stored and not is_swarm_worker(data):
+            # The worker is connected already but its login fails: the master asks
+            # for the credentials (reconfigure); no second request for the same.
+            return self.async_abort(reason="worker_login_required")
         if is_swarm_worker(data):
             if uuid:
                 await async_attribute_worker(
@@ -307,6 +311,7 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
                 PASSWORD: self._password,
                 IDENT: ident,
             },
+            keep_flow_id=self.flow_id,
         )
         return key is not None
 
@@ -383,6 +388,13 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
             workers[worker] = {**workers.get(worker, {}), USER: user, PASSWORD: password}
             self.hass.config_entries.async_update_entry(
                 entry, data={**entry.data, CONF_WORKERS: workers}
+            )
+            close_worker_prompts(
+                self.hass,
+                entry.entry_id,
+                worker,
+                workers[worker].get(IDENT),
+                self.flow_id,
             )
             return
         options = dict(entry.options)

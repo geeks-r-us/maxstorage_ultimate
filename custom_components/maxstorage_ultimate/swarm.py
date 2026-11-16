@@ -13,12 +13,13 @@ import logging
 import socket
 from typing import Any
 
+from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 from .client import get_mac_address
 from .const import CONF_WORKERS, DOMAIN
-from .workers import HOST, stored_credentials, stored_workers
+from .workers import HOST, IDENT, stored_credentials, stored_workers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -183,8 +184,45 @@ def is_known_worker(hass: HomeAssistant, ident: str) -> bool:
     return False
 
 
+def close_worker_prompts(
+    hass: HomeAssistant,
+    entry_id: str,
+    key: str,
+    ident: str | None,
+    keep_flow_id: str | None = None,
+) -> None:
+    """Close the requests for the credentials of a worker that are still open.
+
+    The credentials of a worker can be requested in two ways: the reconfigure
+    request of its master (reauthentication) and the card of its discovery.
+    Once they were entered through one of them, the other one is not needed.
+    """
+    for flow in hass.config_entries.flow.async_progress_by_handler(DOMAIN):
+        if flow["flow_id"] == keep_flow_id:
+            continue
+        context = flow["context"]
+        source = context.get("source")
+        reauth = (
+            source == config_entries.SOURCE_REAUTH
+            and context.get("entry_id") == entry_id
+            and context.get("worker") == key
+        )
+        discovery = (
+            source == config_entries.SOURCE_ZEROCONF
+            and ident is not None
+            and context.get("unique_id") == ident
+        )
+        if reauth or discovery:
+            hass.config_entries.flow.async_abort(flow["flow_id"])
+            _LOGGER.debug("Closed the open request %s for %s", source, key)
+
+
 def _store_connection(
-    hass: HomeAssistant, entry_id: str, key: str, connection: dict[str, str]
+    hass: HomeAssistant,
+    entry_id: str,
+    key: str,
+    connection: dict[str, str],
+    keep_flow_id: str | None = None,
 ) -> None:
     """Store the connection of a worker in the config entry of its master.
 
@@ -200,6 +238,7 @@ def _store_connection(
         entry, data={**entry.data, CONF_WORKERS: {**workers, key: connection}}
     )
     _LOGGER.debug("Stored the connection of %s (host %s)", key, connection.get(HOST))
+    close_worker_prompts(hass, entry_id, key, connection.get(IDENT), keep_flow_id)
 
 
 async def async_attribute_worker(
@@ -211,6 +250,7 @@ async def async_attribute_worker(
     device_info: dict[str, Any] | None = None,
     model: str | None = None,
     connection: dict[str, str] | None = None,
+    keep_flow_id: str | None = None,
 ) -> str | None:
     """Complete the device of a discovered worker.
 
@@ -254,7 +294,7 @@ async def async_attribute_worker(
                 registry.async_update_device(device.id, **details)
                 _LOGGER.debug("Updated details of worker %s: %s", ident, details)
             if connection:
-                _store_connection(hass, entry_id, key, connection)
+                _store_connection(hass, entry_id, key, connection, keep_flow_id)
             return key
 
         candidates: dict[str, dict[str, Any]] = {}
@@ -283,7 +323,7 @@ async def async_attribute_worker(
             registry.async_update_device(device.id, **details)
             _LOGGER.debug("Set details of %s: %s", key, details)
         if connection:
-            _store_connection(hass, entry_id, key, connection)
+            _store_connection(hass, entry_id, key, connection, keep_flow_id)
 
         mac = await async_lookup_mac(hass, addresses, hostname)
         if not mac:

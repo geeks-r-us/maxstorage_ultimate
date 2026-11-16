@@ -545,3 +545,115 @@ async def test_diagnostics_show_a_worker_that_does_not_answer(hass: HomeAssistan
 
     assert result["workers"]["worker1"]["last_update_success"] is False
     assert result["workers"]["worker1"]["overview"] == {}
+
+
+# ---- one request for the credentials of a worker, not two -------------------------
+
+CONNECTED = {**STORED, "ident": "maxstorage-w1"}
+
+
+def _open_flows(hass):
+    return {
+        flow["flow_id"]: flow["context"].get("source")
+        for flow in hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    }
+
+
+async def test_connected_worker_with_a_wrong_login_gets_only_the_reconfigure_request(
+    hass: HomeAssistant,
+):
+    entry = _entry(workers={"worker1": CONNECTED})
+    worker = _worker_link_client()
+    worker.get_device_overview.side_effect = AuthenticationFailedError("refused")
+    await _setup(hass, entry, worker=worker)
+    assert len(_reauth_flows(hass)) == 1
+
+    # the worker announces itself again; its stored login does not work
+    result, _ = await _discover_worker(hass, _probe_for(set()))
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "worker_login_required"
+    assert list(_open_flows(hass).values()) == [config_entries.SOURCE_REAUTH]
+
+
+async def test_reconfigure_closes_the_card_of_the_same_worker(hass: HomeAssistant):
+    entry = _entry()
+    await _setup(hass, entry)
+    card, _ = await _discover_worker(hass, _probe_for({("me", "secret")}))
+    assert card["step_id"] == "confirm"  # an older version stored the connection later:
+    with no_reload():
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "workers": {"worker1": CONNECTED}}
+        )
+    reauth = await entry.start_reauth_flow(hass, context={"worker": "worker1"})
+    assert {card["flow_id"], reauth["flow_id"]} <= set(_open_flows(hass))
+
+    with (
+        patch(
+            "custom_components.maxstorage_ultimate.config_flow.MaxStorageClient",
+            return_value=_login_client(),
+        ),
+        no_reload(),
+    ):
+        await hass.config_entries.flow.async_configure(
+            reauth["flow_id"],
+            {"maxstorage_user": "me", "maxstorage_password": "secret"},
+        )
+
+    assert card["flow_id"] not in _open_flows(hass)
+    assert reauth["flow_id"] not in _open_flows(hass)
+
+
+async def test_card_closes_the_reconfigure_request_of_the_same_worker(hass: HomeAssistant):
+    entry = _entry()
+    await _setup(hass, entry)
+    probe = _probe_for({("me", "secret")})
+    card, _ = await _discover_worker(hass, probe)
+    with no_reload():
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, "workers": {"worker1": CONNECTED}}
+        )
+    reauth = await entry.start_reauth_flow(hass, context={"worker": "worker1"})
+
+    with (
+        patch(
+            "custom_components.maxstorage_ultimate.config_flow.MaxStorageClient",
+            side_effect=probe,
+        ),
+        patch(
+            "custom_components.maxstorage_ultimate.swarm.get_mac_address",
+            return_value=WORKER_MAC,
+        ),
+        no_reload(),
+    ):
+        done = await hass.config_entries.flow.async_configure(
+            card["flow_id"],
+            {"maxstorage_user": "me", "maxstorage_password": "secret"},
+        )
+
+    assert done["reason"] == "worker_saved"
+    assert reauth["flow_id"] not in _open_flows(hass)
+    assert entry.data["workers"]["worker1"]["user"] == "me"
+
+
+async def test_other_workers_are_not_touched(hass: HomeAssistant):
+    """Only the requests for the worker whose credentials were entered are closed."""
+    two = {"worker1": CONNECTED, "worker2": {**STORED, "ident": "maxstorage-w2"}}
+    entry = _entry(workers=two)
+    await _setup(hass, entry)
+    other = await entry.start_reauth_flow(hass, context={"worker": "worker2"})
+    mine = await entry.start_reauth_flow(hass, context={"worker": "worker1"})
+
+    with (
+        patch(
+            "custom_components.maxstorage_ultimate.config_flow.MaxStorageClient",
+            return_value=_login_client(),
+        ),
+        no_reload(),
+    ):
+        await hass.config_entries.flow.async_configure(
+            mine["flow_id"],
+            {"maxstorage_user": "me", "maxstorage_password": "secret"},
+        )
+
+    assert other["flow_id"] in _open_flows(hass)
