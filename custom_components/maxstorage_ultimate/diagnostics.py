@@ -20,6 +20,11 @@ TO_REDACT_CONFIG = {
     CONF_STORAGE_PASSWORD,
     "name",
     "unique_id",
+    # stored connections of the swarm workers (host, user, password, hostname)
+    "host",
+    "user",
+    "password",
+    "ident",
 }
 # The weather block contains the plant's location (coordinates, city name).
 TO_REDACT_DATA = {"WeatherData"}

@@ -4,7 +4,9 @@
       "already_configured": "Device is already configured",
       "already_in_progress": "Configuration flow is already in progress",
       "ignore_ip6_link_local": "IPv6 link local address is not supported.",
-      "swarm_worker": "This device is a swarm worker. Please add the master instead; the data of all workers is included automatically."
+      "swarm_worker": "This device is a swarm worker. Please add the master instead; the data of all workers is included automatically.",
+      "reauth_successful": "The credentials were updated.",
+      "worker_saved": "The credentials of the swarm worker were saved for its master. Its values are read from now on."
     },
     "error": {
       "cannot_connect": "Failed to connect",
@@ -12,7 +14,8 @@
       "unknown": "Unexpected error",
       "invalid_auth": "Invalid username or password",
       "already_configured": "Device is already configured",
-      "swarm_worker": "This device is a swarm worker. Please add the master instead; the data of all workers is included automatically."
+      "swarm_worker": "This device is a swarm worker. Please add the master instead; the data of all workers is included automatically.",
+      "login_locked": "The device locks the login for a short time after failed attempts. Please try again in a minute."
     },
     "flow_title": "{name}",
     "step": {
@@ -21,7 +24,8 @@
         "data": {
           "maxstorage_user": "Username (default: user)",
           "maxstorage_password": "Password (default: solarmax.com)"
-        }
+        },
+        "description": "Enter the login of {name}. If it turns out to be a swarm worker, the credentials are kept for the master it belongs to; add only the master as integration."
       },
       "user": {
         "title": "Set up Max.Storage Ultimate",
@@ -30,6 +34,14 @@
           "maxstorage_host": "Host (ip or hostname)",
           "maxstorage_user": "Username (default: user)",
           "maxstorage_password": "Password (default: solarmax.com)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in again",
+        "description": "The login to {name} ({host}) did not work. Please enter the current user name and password of the device.",
+        "data": {
+          "maxstorage_user": "Username",
+          "maxstorage_password": "Password"
         }
       }
     }
@@ -85,10 +97,24 @@
         "name": "Grid Export Energy"
       },
       "dcdc_state": {
-        "name": "DC/DC converter {index} state"
+        "name": "DC/DC converter {index} state",
+        "state": {
+          "operating": "Operating",
+          "standby": "Standby",
+          "fault": "Fault",
+          "off": "Off",
+          "other": "Other"
+        }
       },
       "battery_state": {
-        "name": "Battery {index} state"
+        "name": "Battery {index} state",
+        "state": {
+          "operating": "Operating",
+          "standby": "Standby",
+          "fault": "Fault",
+          "off": "Off",
+          "other": "Other"
+        }
       }
     }
   },

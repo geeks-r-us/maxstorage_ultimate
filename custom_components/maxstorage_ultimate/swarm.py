@@ -17,7 +17,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 from .client import get_mac_address
-from .const import DOMAIN
+from .const import CONF_WORKERS, DOMAIN
+from .workers import HOST, stored_credentials, stored_workers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -166,9 +167,11 @@ def is_known_worker(hass: HomeAssistant, ident: str) -> bool:
     """Return True if a worker with this hostname is complete.
 
     Complete means: attributed (hostname and MAC), its firmware version and its
-    full model name (not just the device type "mc2") are known. Otherwise it is
-    queried again on its next announcement.
+    full model name (not just the device type "mc2") are known, and its
+    connection is stored. Otherwise it is queried again on its next announcement.
     """
+    if stored_credentials(hass, ident) is None:
+        return False
     for entry_id in hass.data.get(DOMAIN, {}):
         for device in _entry_devices(hass, entry_id):
             if (
@@ -180,6 +183,25 @@ def is_known_worker(hass: HomeAssistant, ident: str) -> bool:
     return False
 
 
+def _store_connection(
+    hass: HomeAssistant, entry_id: str, key: str, connection: dict[str, str]
+) -> None:
+    """Store the connection of a worker in the config entry of its master.
+
+    Changing the entry reloads it, which sets up the connection to the worker.
+    """
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None:
+        return
+    workers = stored_workers(entry)
+    if workers.get(key) == connection:
+        return
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_WORKERS: {**workers, key: connection}}
+    )
+    _LOGGER.debug("Stored the connection of %s (host %s)", key, connection.get(HOST))
+
+
 async def async_attribute_worker(
     hass: HomeAssistant,
     worker_data: dict[str, Any],
@@ -188,12 +210,18 @@ async def async_attribute_worker(
     hostname: str | None = None,
     device_info: dict[str, Any] | None = None,
     model: str | None = None,
-) -> bool:
+    connection: dict[str, str] | None = None,
+) -> str | None:
     """Complete the device of a discovered worker.
 
     Adds firmware, hardware version, serial number and model name from the
-    worker's device pages, and the MAC address and hostname. The worker is recognised by its
-    hostname if it was attributed before, otherwise by its measurements.
+    worker's device pages, and the MAC address and hostname. The worker is
+    recognised by its hostname if it was attributed before, otherwise by its
+    measurements. With a connection (host, user, password, ident) it is also
+    stored so that the worker is read directly from then on.
+
+    Returns the key of the worker ("worker1") if it belongs to a configured
+    master, otherwise None.
     """
     registry = dr.async_get(hass)
     details = _device_details(device_info)
@@ -217,10 +245,17 @@ async def async_attribute_worker(
 
         device = by_identifier.get(ident)
         if device is not None:  # attributed before, only the details are missing
+            key = next(
+                i.removeprefix(f"{master}_")
+                for d, i in device.identifiers
+                if d == DOMAIN and i.startswith(f"{master}_worker")
+            )
             if details:
                 registry.async_update_device(device.id, **details)
                 _LOGGER.debug("Updated details of worker %s: %s", ident, details)
-            return True
+            if connection:
+                _store_connection(hass, entry_id, key, connection)
+            return key
 
         candidates: dict[str, dict[str, Any]] = {}
         for key, block in coordinator.workers.items():
@@ -247,31 +282,33 @@ async def async_attribute_worker(
         if details:
             registry.async_update_device(device.id, **details)
             _LOGGER.debug("Set details of %s: %s", key, details)
+        if connection:
+            _store_connection(hass, entry_id, key, connection)
 
         mac = await async_lookup_mac(hass, addresses, hostname)
         if not mac:
             _LOGGER.debug(
                 "No MAC address for discovered worker %s (%s)", ident, addresses
             )
-            return False
-        connection = (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
+            return key
+        mac_connection = (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
         # A MAC shared with another device of *this* integration is rejected (e.g.
         # a routed host answering with the router's MAC, which is also the
         # master's). The same MAC on a device of another integration (e.g. UniFi)
         # is how devices are linked and is accepted by newer Home Assistant
         # versions; older ones raise a collision error, see below.
         if any(
-            connection in other.connections
+            mac_connection in other.connections
             for other in _entry_devices(hass, entry_id)
             if other.id != device.id
         ):
             _LOGGER.debug("MAC %s of worker %s is already used, skipping", mac, ident)
-            return False
+            return key
 
         try:
             registry.async_update_device(
                 device.id,
-                new_connections=device.connections | {connection},
+                new_connections=device.connections | {mac_connection},
                 new_identifiers=device.identifiers | {(DOMAIN, ident)},
             )
         except dr.DeviceCollisionError:
@@ -283,7 +320,7 @@ async def async_attribute_worker(
                 mac,
                 ident,
             )
-            return False
+            return key
         _LOGGER.debug("Attributed discovered worker %s to %s (%s)", ident, key, mac)
-        return True
-    return False
+        return key
+    return None

@@ -19,3 +19,7 @@ ERROR_AUTH_INVALID = "invalid_auth"
 ERROR_CANNOT_CONNECT = "cannot_connect"
 ERROR_UNKNOWN = "unknown"
 ERROR_SWARM_WORKER = "swarm_worker"
+ERROR_LOGIN_LOCKED = "login_locked"
+
+# Connections to swarm workers (host, user, password, ident) by worker key
+CONF_WORKERS = "workers"
