@@ -119,11 +119,14 @@ class MaxStorageClient:
             password (str): The password for authentication.
         """
         cookie_jar = aiohttp.CookieJar(unsafe=True)
-        self.session = aiohttp.ClientSession(cookie_jar=cookie_jar)
+        self.session = aiohttp.ClientSession(
+            cookie_jar=cookie_jar, timeout=aiohttp.ClientTimeout(total=30)
+        )
         base_url = normalize_host(base_url)
         self.base_url = base_url
         self.login_url = f"http://{base_url}/home.php"
         self.data_url = f"http://{base_url}/shared/energycontrolfunctions.php"
+        self.logincheck_url = f"http://{base_url}/shared/logincheck.php"
         self.overview_url = f"http://{base_url}/shared/getDeviceData.php"
         self.overview_referer = f"http://{base_url}/device_overview.php"
         self.username = username
@@ -159,8 +162,40 @@ class MaxStorageClient:
         if not self.is_token_valid():
             await self.authenticate()
 
+    async def _login_check(self) -> None:
+        """Log in like the web interface does: POST shared/logincheck.php.
+
+        Only this call gives the session access to all pages (e.g. the device
+        overview); sending the credentials to home.php is enough for the device
+        info and the live data only. The answer is "1" on success. Older firmware
+        without logincheck.php answers differently (404 or a page) and is left to
+        the login through home.php below.
+        """
+        try:
+            async with self.session.post(
+                self.logincheck_url, data={"u": self.username, "p": self.password}
+            ) as response:
+                if response.status != 200:
+                    return
+                answer = (await response.text()).strip()
+        except aiohttp.ClientConnectorError as e:
+            raise InvalidHostError(f"Invalid host: {self.logincheck_url}") from e
+        except aiohttp.ClientError:
+            return
+        if not re.fullmatch(r"-?\d{1,6}", answer) or answer == "1":
+            return
+        if answer.startswith("-"):
+            raise LoginLockedError(
+                f"Login is locked for {answer[1:]} seconds after failed attempts"
+            )
+        raise AuthenticationFailedError(
+            f"Login refused (answer {answer}): wrong user name or password, or the "
+            "device asks for a new password or a one-time code"
+        )
+
     async def authenticate(self):
         """Authenticate with the server. The session will handle the cookie."""
+        await self._login_check()
         data = {"username": self.username, "password": self.password}
         try:
             async with self.session.post(self.login_url, data=data) as response:
@@ -254,23 +289,32 @@ class MaxStorageClient:
             raise InvalidHostError(f"Invalid host: {self.data_url}") from e
 
     async def get_device_overview(self) -> dict:
-        """Read the model name and the DC/DC converter and battery states."""
+        """Read the model name and the DC/DC converter and battery states.
+
+        The device answers an expired session with an empty page, so an empty
+        answer leads to one new login and a second try.
+        """
         await self.ensure_authenticated()
         try:
-            async with self.session.post(
-                self.overview_url,
-                data={"showActiveDeviceLiveData": "true"},
-                headers={
-                    "X-Requested-With": "XMLHttpRequest",
-                    "Referer": self.overview_referer,
-                },
-            ) as response:
-                if response.status != 200:
-                    raise HTTPError(
-                        f"Failed to fetch the device overview with status code "
-                        f"{response.status}: {await response.text()}"
-                    )
-                return parse_device_overview(await response.text())
+            for attempt in (1, 2):
+                async with self.session.post(
+                    self.overview_url,
+                    data={"showActiveDeviceLiveData": "true"},
+                    headers={
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Referer": self.overview_referer,
+                    },
+                ) as response:
+                    if response.status != 200:
+                        raise HTTPError(
+                            f"Failed to fetch the device overview with status code "
+                            f"{response.status}: {await response.text()}"
+                        )
+                    html = await response.text()
+                if html.strip() or attempt == 2:
+                    return parse_device_overview(html)
+                self.last_auth_time = None
+                await self.authenticate()
         except aiohttp.ClientConnectorError as e:
             raise InvalidHostError(f"Invalid host: {self.overview_url}") from e
 
@@ -285,6 +329,13 @@ class DataParserError(Exception):
 
 class AuthenticationFailedError(Exception):
     """Exception raised when authentication fails."""
+
+
+class LoginLockedError(AuthenticationFailedError):
+    """Exception raised while the device locks the login after failed attempts.
+
+    The credentials may be right, so this is no reason to ask for new ones.
+    """
 
 
 class InvalidHostError(Exception):
