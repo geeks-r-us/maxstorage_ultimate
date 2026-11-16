@@ -4,7 +4,8 @@
       "already_configured": "Gerät ist bereits konfiguriert",
       "swarm_worker": "Dieses Gerät ist ein Schwarm-Slave. Bitte stattdessen den Master hinzufügen; die Daten aller Slaves sind dort automatisch enthalten.",
       "reauth_successful": "Die Zugangsdaten wurden aktualisiert.",
-      "worker_saved": "Die Zugangsdaten des Schwarm-Slaves wurden für seinen Master gespeichert. Seine Werte werden ab jetzt gelesen."
+      "worker_saved": "Die Zugangsdaten des Schwarm-Slaves wurden für seinen Master gespeichert. Seine Werte werden ab jetzt gelesen.",
+      "worker_login_required": "Die Zugangsdaten dieses Schwarm-Slaves sind nicht mehr gültig. Sie lassen sich über „Neu konfigurieren“ an der Integration Max.Storage Ultimate eingeben."
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
