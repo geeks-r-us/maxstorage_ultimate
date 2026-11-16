@@ -5,10 +5,11 @@ import re
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .client import MaxStorageClient
+from .client import AuthenticationFailedError, LoginLockedError, MaxStorageClient
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
         """Initialize."""
         self.api = client
         self.model: str | None = None  # read from the device overview
+        self.worker_links: dict = {}  # direct connections to workers (workers.py)
         super().__init__(
             hass=hass,
             config_entry=config_entry,
@@ -44,9 +46,12 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from API."""
         try:
-            return (
-                await self.api.get_data()
-            )  # Replace with your async method to fetch data
+            return await self.api.get_data()
+        except LoginLockedError as e:
+            raise UpdateFailed(f"Login is locked: {e}") from e
+        except AuthenticationFailedError as e:
+            # Wrong or changed credentials: ask the user to log in again
+            raise ConfigEntryAuthFailed(str(e)) from e
         except Exception as e:
             raise UpdateFailed(f"Error communicating with API: {e}") from e
 
@@ -112,10 +117,16 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
             name=f"MaxStorageUltimate Worker {number}",
             **self._via_master(),
         )
-        # The full model name is set when the worker is discovered; do not
+        # What the worker itself reports (own login), if it is connected
+        link = self.worker_links.get(key)
+        if link is not None:
+            info.update(link.device_fields())
+        # The full model name is also set when the worker is discovered; do not
         # overwrite it with the device type of the measurements.
-        if not self._worker_model(identifier):
-            info["model"] = str(self.workers.get(key, {}).get("deviceTyp") or "Max.Storage")
+        if "model" not in info and not self._worker_model(identifier):
+            info["model"] = str(
+                self.workers.get(key, {}).get("deviceTyp") or "Max.Storage"
+            )
         return info
 
     def _worker_model(self, identifier: tuple[str, str]) -> str | None:
@@ -153,14 +164,16 @@ class MaxStorageOverviewCoordinator(DataUpdateCoordinator):
         hass: HomeAssistant,
         client: MaxStorageClient,
         config_entry: ConfigEntry | None = None,
+        worker_key: str | None = None,
     ) -> None:
         """Initialize."""
         self.api = client
+        self.worker_key = worker_key
         super().__init__(
             hass=hass,
             config_entry=config_entry,
             logger=_LOGGER,
-            name=f"{DOMAIN}-overview-coordinator",
+            name=f"{DOMAIN}-overview-{worker_key or 'master'}-coordinator",
             update_interval=OVERVIEW_INTERVAL,
         )
 
@@ -168,6 +181,18 @@ class MaxStorageOverviewCoordinator(DataUpdateCoordinator):
         """Fetch the device overview."""
         try:
             return await self.api.get_device_overview()
+        except LoginLockedError as e:
+            raise UpdateFailed(f"Login is locked: {e}") from e
+        except AuthenticationFailedError as e:
+            if self.worker_key and self.config_entry is not None:
+                # Ask for the credentials of this worker (see config_flow reauth)
+                self.config_entry.async_start_reauth(
+                    self.hass, context={"worker": self.worker_key}
+                )
+                raise UpdateFailed(
+                    f"Login to {self.worker_key} failed: {e}"
+                ) from e
+            raise ConfigEntryAuthFailed(str(e)) from e
         except Exception as e:
             raise UpdateFailed(f"Error reading the device overview: {e}") from e
 

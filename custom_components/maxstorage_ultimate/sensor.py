@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import logging
+import re
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -68,24 +69,42 @@ async def async_setup_entry(
     _add_swarm_entities()
     config.async_on_unload(coordinator.async_add_listener(_add_swarm_entities))
 
-    # DC/DC converters and batteries of the master (device overview)
-    overview = hass.data[DOMAIN][config.entry_id]["overview"]
-    known_components: set[tuple[str, int]] = set()
+    # DC/DC converters and batteries (device overview) of the master ...
+    runtime = hass.data[DOMAIN][config.entry_id]
 
-    @callback
-    def _add_component_sensors() -> None:
-        new = [
-            MaxStorageComponentSensor(overview, coordinator, kind, index)
-            for kind in COMPONENT_KINDS
-            for index in overview.components(kind)
-            if (kind, index) not in known_components
-        ]
-        if new:
-            known_components.update((s.kind, s.index) for s in new)
-            async_add_entities(new)
+    def _track_components(overview, scope, device_info) -> None:
+        known: set[tuple[str, int]] = set()
 
-    _add_component_sensors()
-    config.async_on_unload(overview.async_add_listener(_add_component_sensors))
+        @callback
+        def _add() -> None:
+            new = [
+                MaxStorageComponentSensor(
+                    overview,
+                    coordinator,
+                    kind,
+                    index,
+                    scope=scope,
+                    device_info=device_info(),
+                )
+                for kind in COMPONENT_KINDS
+                for index in overview.components(kind)
+                if (kind, index) not in known
+            ]
+            if new:
+                known.update((s.kind, s.index) for s in new)
+                async_add_entities(new)
+
+        _add()
+        config.async_on_unload(overview.async_add_listener(_add))
+
+    _track_components(runtime["overview"], "", lambda: coordinator.device_info)
+    # ... and of the workers that are connected with their own credentials
+    for key, link in runtime.get("workers", {}).items():
+        _track_components(
+            link.overview,
+            f"{key}_",
+            lambda key=key: coordinator.worker_device_info(key),
+        )
 
 
 @dataclass(frozen=True)
@@ -158,6 +177,28 @@ class MaxStorageSensor(
 
 
 COMPONENT_KINDS = {"dcdc": "dcdc_state", "batteries": "battery_state"}
+
+# The device writes the state in the language set on the device ("In Betrieb"), so
+# the text is mapped to a fixed key that Home Assistant translates itself. Texts
+# that are not known stay visible in the attribute `device_text`.
+COMPONENT_STATES = ["operating", "standby", "fault", "off", "other"]
+_STATE_WORDS = {
+    "operating": {"in betrieb", "in operation", "operating", "operational", "running"},
+    "standby": {"standby", "stand by", "bereitschaft"},
+    "fault": {"fehler", "störung", "stoerung", "fault", "error"},
+    "off": {"aus", "ausgeschaltet", "off", "switched off"},
+}
+_STATE_LOOKUP = {
+    word: key for key, words in _STATE_WORDS.items() for word in words
+}
+
+
+def component_state(text: str | None) -> str | None:
+    """Map the state text of the device to a language independent key."""
+    if not text:
+        return None
+    words = re.sub(r"[\W_]+", " ", text.casefold()).strip()
+    return _STATE_LOOKUP.get(words, "other")
 COMPONENT_ICONS = {"dcdc": "mdi:current-dc", "batteries": "mdi:battery-heart-variant"}
 
 
@@ -168,6 +209,8 @@ class MaxStorageComponentSensor(
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = COMPONENT_STATES
 
     def __init__(
         self,
@@ -175,32 +218,52 @@ class MaxStorageComponentSensor(
         coordinator: MaxStorageDataUpdateCoordinator,
         kind: str,
         index: int,
+        *,
+        scope: str = "",
+        device_info: DeviceInfo | None = None,
     ) -> None:
-        """Initialize the sensor."""
+        """Initialize the sensor (scope "" for the master, "worker1_" for a worker)."""
         super().__init__(overview)
         self.kind = kind
         self.index = index
+        self._reported: set[str] = set()  # unknown texts already logged
         self._attr_translation_key = COMPONENT_KINDS[kind]
         self._attr_translation_placeholders = {"index": str(index)}
         self._attr_icon = COMPONENT_ICONS[kind]
         self._attr_unique_id = (
-            f"{coordinator.api.device_info['Ident']}_{kind}_{index}_state"
+            f"{coordinator.api.device_info['Ident']}_{scope}{kind}_{index}_state"
         )
-        self._attr_device_info = coordinator.device_info
+        self._attr_device_info = device_info or coordinator.device_info
 
     def _component(self) -> dict[str, Any]:
         return self.coordinator.components(self.kind).get(self.index, {})
 
     @property
     def native_value(self) -> str | None:
-        """Return the state text, e.g. "In Betrieb"."""
-        return self._component().get("state")
+        """Return the state as a key (operating, standby, fault, off, other)."""
+        text = self._component().get("state")
+        state = component_state(text)
+        if state == "other" and text not in self._reported:
+            self._reported.add(text)
+            _LOGGER.warning(
+                "Unknown state text %r of %s %s; shown as 'other'. Please report it "
+                "with a diagnostics file so that it can be added",
+                text,
+                self.kind,
+                self.index,
+            )
+        return state
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the serial number of the module."""
-        serial = self._component().get("serial")
-        return {"serial": serial} if serial else {}
+        """Return the serial number and the text as the device writes it."""
+        component = self._component()
+        attributes = {}
+        if component.get("serial"):
+            attributes["serial"] = component["serial"]
+        if component.get("state"):
+            attributes["device_text"] = component["state"]
+        return attributes
 
 
 class MaxStorageEnergySensor(MaxStorageSensor, RestoreSensor):

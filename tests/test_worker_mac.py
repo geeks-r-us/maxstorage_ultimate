@@ -47,6 +47,35 @@ def _info() -> ZeroconfServiceInfo:
     )
 
 
+def _worker_client():
+    client = MagicMock()
+    client.get_data = AsyncMock(return_value=WORKER)
+    client.get_device_info = MagicMock(return_value=WORKER_INFO)
+    client.device_info = WORKER_INFO
+    client.get_device_overview = AsyncMock(return_value=WORKER_OVERVIEW)
+    client.close = AsyncMock()
+    return client
+
+
+def _factory(master_data):
+    """MaxStorageClient replacement: the worker host answers as the worker."""
+
+    def make(host, *args, **kwargs):
+        if "w1" in str(host):
+            return _worker_client()
+        return _make_client_with(master_data)
+
+    return make
+
+
+# storing the connection of a worker reloads the master; not needed in most tests
+def no_reload():
+    return patch(
+        "homeassistant.config_entries.ConfigEntries.async_reload",
+        AsyncMock(return_value=True),
+    )
+
+
 def _with_workers(*blocks):
     data = copy.deepcopy(MASTER)
     del data["Swarming"]["worker1"]
@@ -80,6 +109,7 @@ async def _discover(hass, mac=WORKER_MAC, worker=WORKER, info=WORKER_INFO):
             "custom_components.maxstorage_ultimate.config_flow.socket.gethostbyname",
             side_effect=socket.gaierror,
         ),
+        no_reload(),
     ):
         client = MagicMock()
         client.get_data = AsyncMock(return_value=worker)
@@ -127,8 +157,11 @@ async def test_survives_reload_of_the_master(hass: HomeAssistant):
     entry = await _setup_master(hass, MASTER)
     await _discover(hass)
 
-    with patch("custom_components.maxstorage_ultimate.MaxStorageClient") as cls:
-        cls.side_effect = lambda *a, **k: _make_client_with(MASTER)
+    with patch("custom_components.maxstorage_ultimate.MaxStorageClient") as cls, patch(
+        "custom_components.maxstorage_ultimate.workers.MaxStorageClient"
+    ) as worker_cls:
+        cls.side_effect = _factory(MASTER)
+        worker_cls.side_effect = _factory(MASTER)
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -333,6 +366,7 @@ async def _discover_with(hass, addresses, resolve=None):
     )
     with (
         patch("custom_components.maxstorage_ultimate.config_flow.MaxStorageClient") as cls,
+        no_reload(),
         patch(
             "custom_components.maxstorage_ultimate.swarm.get_mac_address",
             return_value=WORKER_MAC,
@@ -392,6 +426,7 @@ async def test_ipv6_host_still_uses_the_ipv4_for_the_mac(hass: HomeAssistant):
             "custom_components.maxstorage_ultimate.config_flow.socket.gethostbyname",
             side_effect=socket.gaierror,
         ),
+        no_reload(),
     ):
         client = MagicMock()
         client.get_data = AsyncMock(return_value=WORKER)
@@ -454,8 +489,11 @@ async def test_details_survive_a_reload_of_the_master(hass: HomeAssistant):
     entry = await _setup_master(hass, MASTER)
     await _discover(hass)
 
-    with patch("custom_components.maxstorage_ultimate.MaxStorageClient") as cls:
-        cls.side_effect = lambda *a, **k: _make_client_with(MASTER)
+    with patch("custom_components.maxstorage_ultimate.MaxStorageClient") as cls, patch(
+        "custom_components.maxstorage_ultimate.workers.MaxStorageClient"
+    ) as worker_cls:
+        cls.side_effect = _factory(MASTER)
+        worker_cls.side_effect = _factory(MASTER)
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -478,8 +516,11 @@ async def test_worker_model_survives_a_reload(hass: HomeAssistant):
     entry = await _setup_master(hass, MASTER)
     await _discover(hass)
 
-    with patch("custom_components.maxstorage_ultimate.MaxStorageClient") as cls:
-        cls.side_effect = lambda *a, **k: _make_client_with(MASTER)
+    with patch("custom_components.maxstorage_ultimate.MaxStorageClient") as cls, patch(
+        "custom_components.maxstorage_ultimate.workers.MaxStorageClient"
+    ) as worker_cls:
+        cls.side_effect = _factory(MASTER)
+        worker_cls.side_effect = _factory(MASTER)
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -492,7 +533,7 @@ async def test_worker_without_overview_keeps_the_device_type(hass: HomeAssistant
 
     with patch("custom_components.maxstorage_ultimate.config_flow.MaxStorageClient") as cls, patch(
         "custom_components.maxstorage_ultimate.swarm.get_mac_address", return_value=WORKER_MAC
-    ), patch("socket.gethostbyname", side_effect=lambda h: h):
+    ), patch("socket.gethostbyname", side_effect=lambda h: h), no_reload():
         client = MagicMock()
         client.get_data = AsyncMock(return_value=WORKER)
         client.get_device_info = MagicMock(return_value=WORKER_INFO)

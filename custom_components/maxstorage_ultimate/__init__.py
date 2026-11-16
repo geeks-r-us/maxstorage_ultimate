@@ -2,9 +2,10 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 
-from .client import MaxStorageClient
+from .client import AuthenticationFailedError, LoginLockedError, MaxStorageClient
 from .const import (
     CONF_SCAN_INTERVAL,
     CONF_STORAGE_HOST,
@@ -13,6 +14,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+from .workers import async_close_worker_links, async_setup_worker_links
 from .coordinator import (
     MaxStorageDataUpdateCoordinator,
     MaxStorageOverviewCoordinator,
@@ -43,6 +45,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         try:
             await client.setup()
+        except LoginLockedError as e:
+            await client.close()
+            raise ConfigEntryNotReady(str(e)) from e
+        except AuthenticationFailedError as e:
+            await client.close()
+            raise ConfigEntryAuthFailed(str(e)) from e
         except Exception:
             await client.close()
             raise
@@ -81,6 +89,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if overview.data and overview.data.get("model"):
         coordinator.model = overview.data["model"]
 
+    # Workers with stored credentials: own login, device overview, firmware, model
+    links = await async_setup_worker_links(hass, entry)
+    runtime["workers"] = links
+    coordinator.worker_links = links
+
     # Workers and the swarm refer to the master with via_device, so it has to exist.
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id, **coordinator.device_info
@@ -99,8 +112,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if unload_ok:
         data = hass.data[DOMAIN].pop(entry.entry_id)
-        # Close the aiohttp session
+        # Close the aiohttp sessions
         await data["client"].close()
+        await async_close_worker_links(data.get("workers", {}))
     return unload_ok
 
 

@@ -2,7 +2,9 @@
   "config": {
     "abort": {
       "already_configured": "Gerät ist bereits konfiguriert",
-      "swarm_worker": "Dieses Gerät ist ein Schwarm-Slave. Bitte stattdessen den Master hinzufügen; die Daten aller Slaves sind dort automatisch enthalten."
+      "swarm_worker": "Dieses Gerät ist ein Schwarm-Slave. Bitte stattdessen den Master hinzufügen; die Daten aller Slaves sind dort automatisch enthalten.",
+      "reauth_successful": "Die Zugangsdaten wurden aktualisiert.",
+      "worker_saved": "Die Zugangsdaten des Schwarm-Slaves wurden für seinen Master gespeichert. Seine Werte werden ab jetzt gelesen."
     },
     "error": {
       "cannot_connect": "Verbindung fehlgeschlagen",
@@ -10,7 +12,8 @@
       "unknown": "Unerwarteter Fehler",
       "invalid_auth": "Ungültiger Benutzername oder ungültiges Passwort",
       "already_configured": "Gerät ist bereits konfiguriert",
-      "swarm_worker": "Dieses Gerät ist ein Schwarm-Slave. Bitte stattdessen den Master hinzufügen; die Daten aller Slaves sind dort automatisch enthalten."
+      "swarm_worker": "Dieses Gerät ist ein Schwarm-Slave. Bitte stattdessen den Master hinzufügen; die Daten aller Slaves sind dort automatisch enthalten.",
+      "login_locked": "Das Gerät sperrt die Anmeldung nach Fehlversuchen kurz. Bitte in einer Minute noch einmal versuchen."
     },
     "flow_title": "{name}",
     "step": {
@@ -19,7 +22,8 @@
         "data": {
           "maxstorage_user": "Benutzername (Default: user)",
           "maxstorage_password": "Passwort (Default: solarmax.com)"
-        }
+        },
+        "description": "Anmeldedaten von {name} eingeben. Ist es ein Schwarm-Slave, werden die Daten für seinen Master gespeichert; als Integration wird nur der Master hinzugefügt."
       },
       "user": {
         "title": "Konfiguration der Verbindung zum Wechselrichter",
@@ -28,6 +32,14 @@
           "maxstorage_host": "Host (IP-Adresse oder Hostname)",
           "maxstorage_user": "Benutzername für die Weboberfläche (Default: user)",
           "maxstorage_password": "Passwort für die Weboberfläche (Default: solarmax.com)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Erneut anmelden",
+        "description": "Die Anmeldung bei {name} ({host}) hat nicht funktioniert. Bitte den aktuellen Benutzernamen und das Passwort des Geräts eingeben.",
+        "data": {
+          "maxstorage_user": "Benutzername",
+          "maxstorage_password": "Passwort"
         }
       }
     }
@@ -83,10 +95,24 @@
         "name": "Netzeinspeisung Energie"
       },
       "dcdc_state": {
-        "name": "DC/DC-Wandler {index} Zustand"
+        "name": "DC/DC-Wandler {index} Zustand",
+        "state": {
+          "operating": "In Betrieb",
+          "standby": "Standby",
+          "fault": "Fehler",
+          "off": "Aus",
+          "other": "Sonstiges"
+        }
       },
       "battery_state": {
-        "name": "Batterie {index} Zustand"
+        "name": "Batterie {index} Zustand",
+        "state": {
+          "operating": "In Betrieb",
+          "standby": "Standby",
+          "fault": "Fehler",
+          "off": "Aus",
+          "other": "Sonstiges"
+        }
       }
     }
   },

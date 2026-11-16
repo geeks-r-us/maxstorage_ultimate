@@ -5,6 +5,7 @@ from unittest.mock import patch
 from homeassistant.core import HomeAssistant
 import pytest
 
+from custom_components.maxstorage_ultimate.const import DOMAIN
 from custom_components.maxstorage_ultimate.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -98,3 +99,30 @@ async def test_diagnostics_contain_the_overview_without_serials(hass: HomeAssist
     assert result["overview"]["dcdc"][0]["serial"] == "**REDACTED**"
     assert "30016382" not in json.dumps(result)
     assert "1556" not in json.dumps(result)
+
+
+async def test_diagnostics_redact_the_credentials_of_workers(hass: HomeAssistant, client_cls):
+    worker = {
+        "host": "worker-host.local",
+        "user": "worker-user",
+        "password": "worker-secret",
+        "ident": "worker-ident",
+    }
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from .test_init import ENTRY_DATA
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={**ENTRY_DATA, "workers": {"worker1": worker}},
+        unique_id="abc123",
+    )
+    with patch("custom_components.maxstorage_ultimate.workers.MaxStorageClient"):
+        await _setup(hass, entry)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+    dumped = json.dumps(result)
+
+    for secret in ("worker-host.local", "worker-user", "worker-secret", "worker-ident"):
+        assert secret not in dumped, secret
+    assert set(result["entry"]["data"]["workers"]["worker1"]) == set(worker)  # keys stay

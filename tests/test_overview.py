@@ -10,6 +10,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 
 from custom_components.maxstorage_ultimate.client import (
+    AuthenticationFailedError,
     HTTPError,
     MaxStorageClient,
     parse_device_overview,
@@ -141,7 +142,8 @@ async def test_component_sensors(hass: HomeAssistant, client_cls):
     for kind in ("dcdc", "batteries"):
         for index in range(1, 6):
             state = hass.states.get(_entity_id(hass, f"{kind}_{index}_state"))
-            assert state.state == "In Betrieb"
+            assert state.state == "operating"
+            assert state.attributes["device_text"] == "In Betrieb"
     dcdc = hass.states.get(_entity_id(hass, "dcdc_2_state"))
     battery = hass.states.get(_entity_id(hass, "batteries_3_state"))
     assert dcdc.attributes["serial"] == "10000002"
@@ -181,8 +183,10 @@ async def test_state_change_is_picked_up(hass: HomeAssistant, client_cls):
     await runtime["overview"].async_refresh()
     await hass.async_block_till_done()
 
-    assert hass.states.get(_entity_id(hass, "batteries_2_state")).state == "Fehler"
-    assert hass.states.get(_entity_id(hass, "batteries_1_state")).state == "In Betrieb"
+    fault = hass.states.get(_entity_id(hass, "batteries_2_state"))
+    assert fault.state == "fault"
+    assert fault.attributes["device_text"] == "Fehler"
+    assert hass.states.get(_entity_id(hass, "batteries_1_state")).state == "operating"
 
 
 async def test_new_component_is_added_later(hass: HomeAssistant):
@@ -199,7 +203,7 @@ async def test_new_component_is_added_later(hass: HomeAssistant):
     await runtime["overview"].async_refresh()
     await hass.async_block_till_done()
 
-    assert hass.states.get(_entity_id(hass, "dcdc_3_state")).state == "In Betrieb"
+    assert hass.states.get(_entity_id(hass, "dcdc_3_state")).state == "operating"
 
 
 async def test_setup_works_without_an_overview(hass: HomeAssistant):
@@ -234,3 +238,65 @@ async def test_overview_refresh_failure_keeps_the_last_states(hass: HomeAssistan
     # the live data keeps working, the component sensors become unavailable
     assert float(hass.states.get(_entity_id(hass, "battery_soc")).state) == 55
     assert hass.states.get(_entity_id(hass, "dcdc_1_state")).state == "unavailable"
+
+
+# ---- the state text depends on the language set on the device -------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("In Betrieb", "operating"),
+        ("in betrieb", "operating"),
+        ("  In  Betrieb ", "operating"),
+        ("In operation", "operating"),
+        ("Operating", "operating"),
+        ("Standby", "standby"),
+        ("Stand-by", "standby"),
+        ("STANDBY", "standby"),
+        ("Fehler", "fault"),
+        ("Störung", "fault"),
+        ("Fault", "fault"),
+        ("Aus", "off"),
+        ("Off", "off"),
+        ("Etwas ganz anderes", "other"),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_component_state_is_language_independent(text, expected):
+    from custom_components.maxstorage_ultimate.sensor import component_state
+
+    assert component_state(text) == expected
+
+
+async def test_state_is_an_enum_with_translatable_values(hass: HomeAssistant, client_cls):
+    await _setup(hass, _entry())
+
+    state = hass.states.get(_entity_id(hass, "dcdc_1_state"))
+
+    assert state.attributes["device_class"] == "enum"
+    assert state.attributes["options"] == ["operating", "standby", "fault", "off", "other"]
+
+
+async def test_unknown_text_is_shown_as_other_and_reported_once(
+    hass: HomeAssistant, client_cls, caplog
+):
+    entry = _entry()
+    await _setup(hass, entry)
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    odd = {
+        **OVERVIEW,
+        "dcdc": [{**c, "state": "Kalibrierung"} if c["index"] == 1 else c for c in OVERVIEW["dcdc"]],
+    }
+
+    runtime["client"].get_device_overview.return_value = odd
+    for _ in range(3):
+        await runtime["overview"].async_refresh()
+        await hass.async_block_till_done()
+
+    state = hass.states.get(_entity_id(hass, "dcdc_1_state"))
+    assert state.state == "other"
+    assert state.attributes["device_text"] == "Kalibrierung"
+    assert caplog.text.count("Unknown state text 'Kalibrierung'") == 1
+    assert hass.states.get(_entity_id(hass, "dcdc_2_state")).state == "operating"
