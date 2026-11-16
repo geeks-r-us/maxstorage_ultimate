@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from ipaddress import ip_address
 import logging
+import socket
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -24,24 +25,73 @@ SOC_TOLERANCE = 1.0  # percent
 POWER_TOLERANCE = 150.0  # watt, the master data is up to one poll old
 
 
-def pick_ipv4(discovery_info: Any) -> str:
-    """Return the IPv4 address of a discovered device (fallback: its host).
+def pick_ipv4(addresses: list[Any]) -> str | None:
+    """Return the first usable IPv4 address of a discovered device, or None.
 
-    Home Assistant reports the most recently updated address as host, which may
-    be an IPv6 address; the MAC lookup via arp only works with IPv4.
+    The MAC lookup via arp only works with IPv4, while Home Assistant reports
+    the most recently updated address as host, which may be an IPv6 address.
     """
-    addresses = []
-    for candidate in getattr(discovery_info, "ip_addresses", None) or []:
+    found = []
+    for candidate in addresses:
         try:
             address = ip_address(str(candidate))
         except ValueError:
             continue
-        if address.version == 4:
-            addresses.append(address)
-    for address in addresses:
-        if not address.is_link_local and not address.is_unspecified:
+        if address.version == 4 and not address.is_unspecified:
+            found.append(address)
+    for address in found:
+        if not address.is_link_local:
             return str(address)
-    return str(addresses[0]) if addresses else discovery_info.host
+    return str(found[0]) if found else None
+
+
+def mac_from_eui64(address: str) -> str | None:
+    """Derive the MAC address from an IPv6 address built from it (EUI-64).
+
+    A SLAAC address without privacy extensions has the MAC address in its last
+    64 bits with ff:fe inserted in the middle and the universal/local bit
+    flipped. Returns None for any other address.
+    """
+    try:
+        parsed = ip_address(str(address))
+    except ValueError:
+        return None
+    if parsed.version != 6:
+        return None
+    iid = parsed.packed[8:]
+    if iid[3:5] != b"\xff\xfe":
+        return None
+    mac = bytes([iid[0] ^ 0x02]) + iid[1:3] + iid[5:]
+    return ":".join(f"{octet:02x}" for octet in mac)
+
+
+def _resolve_ipv4(hostname: str) -> str | None:
+    try:
+        return socket.gethostbyname(hostname)
+    except OSError:
+        return None
+
+
+async def async_lookup_mac(
+    hass: HomeAssistant, addresses: list[Any], hostname: str | None
+) -> str | None:
+    """Find the MAC address of a discovered device.
+
+    1. arp with an IPv4 address from the discovery,
+    2. arp with the IPv4 address the hostname resolves to (as for the master),
+    3. derived from an EUI-64 IPv6 address of the discovery.
+    """
+    ipv4 = pick_ipv4(addresses)
+    if ipv4 is None and hostname:
+        ipv4 = await hass.async_add_executor_job(_resolve_ipv4, hostname.rstrip("."))
+    if ipv4:
+        mac = await hass.async_add_executor_job(get_mac_address, ipv4)
+        if mac:
+            return mac
+    for address in addresses:
+        if mac := mac_from_eui64(address):
+            return mac
+    return None
 
 
 def _num(data: dict[str, Any], key: str) -> float | None:
@@ -102,14 +152,18 @@ def is_known_worker(hass: HomeAssistant, ident: str) -> bool:
 
 
 async def async_attribute_worker(
-    hass: HomeAssistant, worker_data: dict[str, Any], ident: str, ip: str
+    hass: HomeAssistant,
+    worker_data: dict[str, Any],
+    ident: str,
+    addresses: list[Any],
+    hostname: str | None = None,
 ) -> bool:
     """Add MAC address and hostname to the worker device that matches worker_data."""
     registry = dr.async_get(hass)
     _LOGGER.debug(
         "Discovered worker %s (%s): looking for a match among %d configured entries",
         ident,
-        ip,
+        addresses,
         len(hass.data.get(DOMAIN, {})),
     )
     for entry_id, runtime in hass.data.get(DOMAIN, {}).items():
@@ -143,9 +197,11 @@ async def async_attribute_worker(
             )
             continue
 
-        mac = await hass.async_add_executor_job(get_mac_address, ip)
+        mac = await async_lookup_mac(hass, addresses, hostname)
         if not mac:
-            _LOGGER.debug("No MAC address for discovered worker %s (%s)", ident, ip)
+            _LOGGER.debug(
+                "No MAC address for discovered worker %s (%s)", ident, addresses
+            )
             return False
         connection = (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
         device = by_identifier[f"{master}_{key}"]
