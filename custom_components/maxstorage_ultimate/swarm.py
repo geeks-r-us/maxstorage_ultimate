@@ -8,6 +8,7 @@ so that e.g. the UniFi integration can merge it with the network client.
 """
 from __future__ import annotations
 
+from ipaddress import ip_address
 import logging
 from typing import Any
 
@@ -21,6 +22,26 @@ _LOGGER = logging.getLogger(__name__)
 
 SOC_TOLERANCE = 1.0  # percent
 POWER_TOLERANCE = 150.0  # watt, the master data is up to one poll old
+
+
+def pick_ipv4(discovery_info: Any) -> str:
+    """Return the IPv4 address of a discovered device (fallback: its host).
+
+    Home Assistant reports the most recently updated address as host, which may
+    be an IPv6 address; the MAC lookup via arp only works with IPv4.
+    """
+    addresses = []
+    for candidate in getattr(discovery_info, "ip_addresses", None) or []:
+        try:
+            address = ip_address(str(candidate))
+        except ValueError:
+            continue
+        if address.version == 4:
+            addresses.append(address)
+    for address in addresses:
+        if not address.is_link_local and not address.is_unspecified:
+            return str(address)
+    return str(addresses[0]) if addresses else discovery_info.host
 
 
 def _num(data: dict[str, Any], key: str) -> float | None:
@@ -85,6 +106,12 @@ async def async_attribute_worker(
 ) -> bool:
     """Add MAC address and hostname to the worker device that matches worker_data."""
     registry = dr.async_get(hass)
+    _LOGGER.debug(
+        "Discovered worker %s (%s): looking for a match among %d configured entries",
+        ident,
+        ip,
+        len(hass.data.get(DOMAIN, {})),
+    )
     for entry_id, runtime in hass.data.get(DOMAIN, {}).items():
         coordinator = runtime["coordinator"]
         master = coordinator.api.device_info["Ident"]
@@ -107,6 +134,13 @@ async def async_attribute_worker(
 
         key = match_worker(candidates, worker_data)
         if key is None:
+            _LOGGER.debug(
+                "Discovered worker %s matches none of the unassigned workers %s "
+                "of entry %s",
+                ident,
+                sorted(candidates),
+                master,
+            )
             continue
 
         mac = await hass.async_add_executor_job(get_mac_address, ip)
@@ -115,10 +149,11 @@ async def async_attribute_worker(
             return False
         connection = (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
         device = by_identifier[f"{master}_{key}"]
-        # Home Assistant only rejects a connection that two devices of the *same*
-        # integration share (e.g. a routed host answering with the router's MAC,
-        # which is also the master's). The same MAC on a device of another
-        # integration (e.g. UniFi) is how devices are linked, so it is wanted.
+        # A MAC shared with another device of *this* integration is rejected (e.g.
+        # a routed host answering with the router's MAC, which is also the
+        # master's). The same MAC on a device of another integration (e.g. UniFi)
+        # is how devices are linked and is accepted by newer Home Assistant
+        # versions; older ones raise a collision error, see below.
         if any(
             connection in other.connections
             for other in _entry_devices(hass, entry_id)
@@ -127,11 +162,22 @@ async def async_attribute_worker(
             _LOGGER.debug("MAC %s of worker %s is already used, skipping", mac, ident)
             return False
 
-        registry.async_update_device(
-            device.id,
-            new_connections=device.connections | {connection},
-            new_identifiers=device.identifiers | {(DOMAIN, ident)},
-        )
+        try:
+            registry.async_update_device(
+                device.id,
+                new_connections=device.connections | {connection},
+                new_identifiers=device.identifiers | {(DOMAIN, ident)},
+            )
+        except dr.DeviceCollisionError:
+            # Older Home Assistant versions let a connection belong to one device
+            # only; another integration (e.g. UniFi) already has it.
+            _LOGGER.debug(
+                "MAC %s of worker %s is registered with a device of another "
+                "integration; this Home Assistant version cannot share it",
+                mac,
+                ident,
+            )
+            return False
         _LOGGER.debug("Attributed discovered worker %s to %s (%s)", ident, key, mac)
         return True
     return False
