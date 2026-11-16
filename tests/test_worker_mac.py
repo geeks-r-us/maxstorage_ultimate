@@ -236,8 +236,14 @@ async def test_mac_of_another_integration_is_linked(hass: HomeAssistant):
         name="Inverter worker",
     )
 
-    await _discover(hass)
+    result, _ = await _discover(hass)  # must not raise in any version
 
+    assert result["reason"] == "swarm_worker"
     device = _worker_device(hass, entry)
-    assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in device.connections
-    assert (DOMAIN, "maxstorage-w1") in device.identifiers
+    if hasattr(dr.DeviceEntry, "is_composite_device"):
+        # newer Home Assistant: devices of different integrations share the MAC
+        assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in device.connections
+        assert (DOMAIN, "maxstorage-w1") in device.identifiers
+    else:
+        # older Home Assistant: the connection belongs to the other device, skipped
+        assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) not in device.connections

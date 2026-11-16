@@ -6,11 +6,17 @@ on:
 
 jobs:
   pytest:
+    name: pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.13 resolves to an older Home Assistant, 3.14 to the current one
+        python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
       - run: pip install -r requirements_test.txt
       - run: pytest -q
