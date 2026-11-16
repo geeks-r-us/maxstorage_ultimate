@@ -17,11 +17,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.const import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import WORKER_KEY, MaxStorageDataUpdateCoordinator
+from .coordinator import (
+    WORKER_KEY,
+    MaxStorageDataUpdateCoordinator,
+    MaxStorageOverviewCoordinator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +67,25 @@ async def async_setup_entry(
 
     _add_swarm_entities()
     config.async_on_unload(coordinator.async_add_listener(_add_swarm_entities))
+
+    # DC/DC converters and batteries of the master (device overview)
+    overview = hass.data[DOMAIN][config.entry_id]["overview"]
+    known_components: set[tuple[str, int]] = set()
+
+    @callback
+    def _add_component_sensors() -> None:
+        new = [
+            MaxStorageComponentSensor(overview, coordinator, kind, index)
+            for kind in COMPONENT_KINDS
+            for index in overview.components(kind)
+            if (kind, index) not in known_components
+        ]
+        if new:
+            known_components.update((s.kind, s.index) for s in new)
+            async_add_entities(new)
+
+    _add_component_sensors()
+    config.async_on_unload(overview.async_add_listener(_add_component_sensors))
 
 
 @dataclass(frozen=True)
@@ -131,6 +155,52 @@ class MaxStorageSensor(
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self.async_write_ha_state()
+
+
+COMPONENT_KINDS = {"dcdc": "dcdc_state", "batteries": "battery_state"}
+COMPONENT_ICONS = {"dcdc": "mdi:current-dc", "batteries": "mdi:battery-heart-variant"}
+
+
+class MaxStorageComponentSensor(
+    CoordinatorEntity[MaxStorageOverviewCoordinator], SensorEntity
+):
+    """State of a DC/DC converter or a battery module (text of the device page)."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        overview: MaxStorageOverviewCoordinator,
+        coordinator: MaxStorageDataUpdateCoordinator,
+        kind: str,
+        index: int,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(overview)
+        self.kind = kind
+        self.index = index
+        self._attr_translation_key = COMPONENT_KINDS[kind]
+        self._attr_translation_placeholders = {"index": str(index)}
+        self._attr_icon = COMPONENT_ICONS[kind]
+        self._attr_unique_id = (
+            f"{coordinator.api.device_info['Ident']}_{kind}_{index}_state"
+        )
+        self._attr_device_info = coordinator.device_info
+
+    def _component(self) -> dict[str, Any]:
+        return self.coordinator.components(self.kind).get(self.index, {})
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state text, e.g. "In Betrieb"."""
+        return self._component().get("state")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the serial number of the module."""
+        serial = self._component().get("serial")
+        return {"serial": serial} if serial else {}
 
 
 class MaxStorageEnergySensor(MaxStorageSensor, RestoreSensor):

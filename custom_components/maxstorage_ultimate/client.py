@@ -59,6 +59,44 @@ def get_mac_address(ip_address):
         return None
 
 
+_COMPONENT_TITLE = re.compile(r"^(DC/DC|Batterie)\s*#\s*(\d+)\s*\|\s*(.+)$")
+
+
+def parse_device_overview(html: str) -> dict:
+    """Parse the response of getDeviceData.php (the device overview page).
+
+    Returns the model name of the device and the state of every DC/DC converter
+    and battery: {"model": str | None, "dcdc": [...], "batteries": [...]}, each
+    component being {"index": int, "serial": str, "state": str | None}.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    result: dict = {"model": None, "dcdc": [], "batteries": []}
+
+    # The widget with the picture of the storage carries the model name.
+    picture = soup.find("img", src=re.compile("maxstorage", re.IGNORECASE))
+    box = picture.find_parent(class_="widget-box") if picture else None
+    title = box.select_one(".widget-title h5") if box else None
+    if title is None:
+        title = soup.select_one(".widget-title h5")
+    if title is not None and not _COMPONENT_TITLE.match(title.get_text(" ", strip=True)):
+        result["model"] = title.get_text(" ", strip=True) or None
+
+    for heading in soup.select(".widget-title h5"):
+        match = _COMPONENT_TITLE.match(heading.get_text(" ", strip=True))
+        if not match:
+            continue
+        kind, index, serial = match.groups()
+        widget = heading.find_parent(class_="widget-box")
+        state = widget.find("h4", class_="text-center") if widget else None
+        component = {
+            "index": int(index),
+            "serial": serial.strip(),
+            "state": state.get_text(strip=True) if state else None,
+        }
+        result["dcdc" if kind == "DC/DC" else "batteries"].append(component)
+    return result
+
+
 def is_swarm_worker(data: object) -> bool:
     """Return True if the device response comes from a swarm worker.
 
@@ -86,6 +124,8 @@ class MaxStorageClient:
         self.base_url = base_url
         self.login_url = f"http://{base_url}/home.php"
         self.data_url = f"http://{base_url}/shared/energycontrolfunctions.php"
+        self.overview_url = f"http://{base_url}/shared/getDeviceData.php"
+        self.overview_referer = f"http://{base_url}/device_overview.php"
         self.username = username
         self.password = password
         self.device_info = {}
@@ -212,6 +252,27 @@ class MaxStorageClient:
                         ) from e
         except aiohttp.ClientConnectorError as e:
             raise InvalidHostError(f"Invalid host: {self.data_url}") from e
+
+    async def get_device_overview(self) -> dict:
+        """Read the model name and the DC/DC converter and battery states."""
+        await self.ensure_authenticated()
+        try:
+            async with self.session.post(
+                self.overview_url,
+                data={"showActiveDeviceLiveData": "true"},
+                headers={
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": self.overview_referer,
+                },
+            ) as response:
+                if response.status != 200:
+                    raise HTTPError(
+                        f"Failed to fetch the device overview with status code "
+                        f"{response.status}: {await response.text()}"
+                    )
+                return parse_device_overview(await response.text())
+        except aiohttp.ClientConnectorError as e:
+            raise InvalidHostError(f"Invalid host: {self.overview_url}") from e
 
     async def close(self):
         """Close the aiohttp session."""

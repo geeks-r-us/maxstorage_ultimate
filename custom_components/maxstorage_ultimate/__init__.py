@@ -13,7 +13,10 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
-from .coordinator import MaxStorageDataUpdateCoordinator
+from .coordinator import (
+    MaxStorageDataUpdateCoordinator,
+    MaxStorageOverviewCoordinator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +68,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         await client.close()
         raise
+
+    # Model name, DC/DC converters and batteries come from the device overview.
+    # Not every firmware provides it, so a failure does not stop the setup.
+    runtime = hass.data[DOMAIN][entry.entry_id]
+    overview = runtime.get("overview")
+    if overview is None:
+        overview = runtime["overview"] = MaxStorageOverviewCoordinator(
+            hass, client, entry
+        )
+    await overview.async_refresh()
+    if overview.data and overview.data.get("model"):
+        coordinator.model = overview.data["model"]
 
     # Workers and the swarm refer to the master with via_device, so it has to exist.
     dr.async_get(hass).async_get_or_create(

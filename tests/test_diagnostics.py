@@ -73,3 +73,28 @@ def _client_returning(data):
     client = _make_client()
     client.get_data.return_value = data
     return client
+
+
+async def test_diagnostics_contain_the_overview_without_serials(hass: HomeAssistant, client_cls):
+    overview = {
+        "model": "15SMT Island (1)",
+        "dcdc": [{"index": 1, "serial": "30016382", "state": "In Betrieb"}],
+        "batteries": [{"index": 1, "serial": "1556", "state": "Fehler"}],
+    }
+
+    def make(*a, **k):
+        client = _make_client()
+        client.get_device_overview.return_value = overview
+        return client
+
+    client_cls.side_effect = make
+    entry = _entry()
+    await _setup(hass, entry)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["overview"]["model"] == "15SMT Island (1)"
+    assert result["overview"]["batteries"][0]["state"] == "Fehler"
+    assert result["overview"]["dcdc"][0]["serial"] == "**REDACTED**"
+    assert "30016382" not in json.dumps(result)
+    assert "1556" not in json.dumps(result)
