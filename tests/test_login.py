@@ -8,6 +8,7 @@ import pytest
 
 from custom_components.maxstorage_ultimate.client import (
     AuthenticationFailedError,
+    LoginLockedError,
     MaxStorageClient,
 )
 from custom_components.maxstorage_ultimate.const import DOMAIN
@@ -184,10 +185,12 @@ async def test_wrong_password_is_reported_as_such_by_the_config_flow(
     assert result["errors"] == {"base": "invalid_auth"}
 
 
-@pytest.mark.parametrize("answer", ["0", "2", "3", "-30"])
-async def test_the_login_through_home_php_still_counts(web_interface, answer, caplog):
-    """A device that answers logincheck.php with 2 or 3 (new password / one-time
-    code wanted) can still be read through home.php, as before."""
+@pytest.mark.parametrize("answer", ["2", "3"])
+async def test_the_login_through_home_php_counts_if_a_new_password_is_wanted(
+    web_interface, answer, caplog
+):
+    """Answers 2 and 3 mean: credentials right, but the device wants a new password
+    or a one-time code. The login through home.php still works, as before."""
     web_interface.answer = answer
     client = MaxStorageClient(web_interface.host, "user", "default")
     try:
@@ -199,6 +202,26 @@ async def test_the_login_through_home_php_still_counts(web_interface, answer, ca
         await client.close()
 
     assert caplog.text.count("The login through home.php works") == 1
+    assert "new password" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("answer", "error"),
+    [("0", AuthenticationFailedError), ("5", AuthenticationFailedError), ("-30", LoginLockedError)],
+)
+async def test_wrong_credentials_count_although_home_php_answers(web_interface, answer, error):
+    """Some firmware shows the start page through home.php for any credentials, so
+    the answer of logincheck.php decides when it says the login is not valid."""
+    web_interface.answer = answer
+    assert web_interface.legacy_accepts  # home.php would let us in
+
+    client = MaxStorageClient(web_interface.host, "user", "wrong")
+    try:
+        with pytest.raises(error):
+            await client.authenticate()
+        assert not client.is_token_valid()
+    finally:
+        await client.close()
 
 
 async def test_overview_stays_empty_without_the_full_login(web_interface):
