@@ -506,3 +506,42 @@ async def test_worker_entered_by_hand_is_saved_for_its_master(hass: HomeAssistan
     assert done["reason"] == "worker_saved"
     assert entry.data["workers"]["worker1"]["host"] == "maxstorage-w1.local"
     assert entry.data["workers"]["worker1"]["user"] == "me"
+
+
+async def test_diagnostics_show_what_a_worker_delivered(hass: HomeAssistant):
+    import json
+
+    from custom_components.maxstorage_ultimate.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+
+    entry = _entry(workers={"worker1": STORED})
+    await _setup(hass, entry)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    worker = result["workers"]["worker1"]
+    assert worker["last_update_success"] is True
+    assert worker["overview"]["model"] == "12SMT Island (2)"
+    assert worker["overview"]["dcdc"][0]["serial"] == "**REDACTED**"
+    assert worker["device_info"]["Firmware-Version"] == "3.4.5"
+    assert worker["device_info"]["MasterController-Nummer"] == "**REDACTED**"
+    dumped = json.dumps(result)
+    for secret in ("worker-pw", "worker-user", "maxstorage-w1", "98765"):
+        assert secret not in dumped, secret
+
+
+async def test_diagnostics_show_a_worker_that_does_not_answer(hass: HomeAssistant):
+    from custom_components.maxstorage_ultimate.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+
+    entry = _entry(workers={"worker1": STORED})
+    worker = _worker_link_client()
+    worker.get_device_overview.side_effect = OSError("offline")
+    await _setup(hass, entry, worker=worker)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["workers"]["worker1"]["last_update_success"] is False
+    assert result["workers"]["worker1"]["overview"] == {}

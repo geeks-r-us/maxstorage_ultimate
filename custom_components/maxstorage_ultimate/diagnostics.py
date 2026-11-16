@@ -60,5 +60,18 @@ async def async_get_config_entry_diagnostics(
         "overview": async_redact_data(
             (runtime["overview"].data or {}), TO_REDACT_OVERVIEW
         ),
+        # Workers with their own login: what they delivered and whether it worked
+        "workers": {
+            key: {
+                "last_update_success": link.overview.last_update_success,
+                "device_info": async_redact_data(
+                    dict(link.client.device_info or {}), TO_REDACT_DEVICE
+                ),
+                "overview": async_redact_data(
+                    (link.overview.data or {}), TO_REDACT_OVERVIEW
+                ),
+            }
+            for key, link in runtime.get("workers", {}).items()
+        },
         "data": async_redact_data(coordinator.data, TO_REDACT_DATA),
     }

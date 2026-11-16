@@ -174,9 +174,13 @@ class MaxStorageClient:
         without logincheck.php answers differently (404 or a page) and is left to
         the login through home.php.
 
-        A refusal (answers 0, 2, 3 or a lock) is returned, not raised: the device
-        also answers 2 or 3 when it wants a new password or a one-time code, while
-        the login through home.php still works. authenticate() decides.
+        Wrong credentials (answer 0 or any other number) and a lock after failed
+        attempts (negative answer) are raised: the device itself says the login
+        is not valid, and the login through home.php cannot be trusted then (it
+        accepts any credentials on some firmware). The answers 2 and 3 mean that
+        the credentials are right but the device wants a new password or a
+        one-time code; that refusal is returned, the login through home.php still
+        works and authenticate() goes on with it.
         """
         try:
             async with self.session.post(
@@ -193,12 +197,16 @@ class MaxStorageClient:
         if not re.fullmatch(r"-?\d{1,6}", answer) or answer == "1":
             return None
         if answer.startswith("-"):
-            return LoginLockedError(
+            raise LoginLockedError(
                 f"Login is locked for {answer[1:]} seconds after failed attempts"
             )
-        return AuthenticationFailedError(
-            f"Login refused (answer {answer}): wrong user name or password, or the "
-            "device asks for a new password or a one-time code"
+        if answer in ("2", "3"):
+            return AuthenticationFailedError(
+                f"The device asks for a new password or a one-time code (answer "
+                f"{answer})"
+            )
+        raise AuthenticationFailedError(
+            f"Login refused (answer {answer}): wrong user name or password"
         )
 
     async def authenticate(self):
@@ -221,9 +229,8 @@ class MaxStorageClient:
                         _LOGGER.warning(
                             "%s: %s. The login through home.php works, so the "
                             "integration goes on, but pages that need the full login "
-                            "(e.g. the device overview) may stay empty until the "
-                            "device accepts the login, e.g. after the password was "
-                            "changed on the device",
+                            "(e.g. the device overview) stay empty until the "
+                            "password was changed on the device (web interface)",
                             self.base_url,
                             refusal,
                         )
