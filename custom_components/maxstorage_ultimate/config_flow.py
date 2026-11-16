@@ -120,7 +120,8 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
                 info if isinstance(info, dict) else {},
                 overview if isinstance(overview, dict) else None,
             )
-        except Exception:  # pylint: disable=broad-except
+        except Exception as error:  # pylint: disable=broad-except
+            _LOGGER.debug("Probe of %s failed: %r", self._host, error)
             return None, {}, None
         finally:
             await client.close()

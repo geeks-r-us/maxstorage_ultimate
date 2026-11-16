@@ -1,4 +1,6 @@
 """Module provides a MaxStorageClient class for interacting with the MaxStorage web service."""
+from __future__ import annotations
+
 import logging
 import asyncio
 import os
@@ -126,6 +128,7 @@ class MaxStorageClient:
         self.base_url = base_url
         self.login_url = f"http://{base_url}/home.php"
         self.data_url = f"http://{base_url}/shared/energycontrolfunctions.php"
+        self._refusal_reported = False
         self.logincheck_url = f"http://{base_url}/shared/logincheck.php"
         self.overview_url = f"http://{base_url}/shared/getDeviceData.php"
         self.overview_referer = f"http://{base_url}/device_overview.php"
@@ -162,14 +165,18 @@ class MaxStorageClient:
         if not self.is_token_valid():
             await self.authenticate()
 
-    async def _login_check(self) -> None:
+    async def _login_check(self) -> AuthenticationFailedError | None:
         """Log in like the web interface does: POST shared/logincheck.php.
 
         Only this call gives the session access to all pages (e.g. the device
         overview); sending the credentials to home.php is enough for the device
         info and the live data only. The answer is "1" on success. Older firmware
         without logincheck.php answers differently (404 or a page) and is left to
-        the login through home.php below.
+        the login through home.php.
+
+        A refusal (answers 0, 2, 3 or a lock) is returned, not raised: the device
+        also answers 2 or 3 when it wants a new password or a one-time code, while
+        the login through home.php still works. authenticate() decides.
         """
         try:
             async with self.session.post(
@@ -181,27 +188,45 @@ class MaxStorageClient:
         except aiohttp.ClientConnectorError as e:
             raise InvalidHostError(f"Invalid host: {self.logincheck_url}") from e
         except aiohttp.ClientError:
-            return
+            return None
+        _LOGGER.debug("Answer of %s: %r", self.logincheck_url, answer[:20])
         if not re.fullmatch(r"-?\d{1,6}", answer) or answer == "1":
-            return
+            return None
         if answer.startswith("-"):
-            raise LoginLockedError(
+            return LoginLockedError(
                 f"Login is locked for {answer[1:]} seconds after failed attempts"
             )
-        raise AuthenticationFailedError(
+        return AuthenticationFailedError(
             f"Login refused (answer {answer}): wrong user name or password, or the "
             "device asks for a new password or a one-time code"
         )
 
     async def authenticate(self):
         """Authenticate with the server. The session will handle the cookie."""
-        await self._login_check()
+        refusal = await self._login_check()
         data = {"username": self.username, "password": self.password}
         try:
             async with self.session.post(self.login_url, data=data) as response:
                 if response.status == 200:
-                    await self._read_device_info(response)
+                    try:
+                        await self._read_device_info(response)
+                    except DataParserError:
+                        # Neither login worked: report what logincheck.php said
+                        if refusal is not None:
+                            raise refusal from None
+                        raise
                     self.last_auth_time = time.time()
+                    if refusal is not None and not self._refusal_reported:
+                        self._refusal_reported = True
+                        _LOGGER.warning(
+                            "%s: %s. The login through home.php works, so the "
+                            "integration goes on, but pages that need the full login "
+                            "(e.g. the device overview) may stay empty until the "
+                            "device accepts the login, e.g. after the password was "
+                            "changed on the device",
+                            self.base_url,
+                            refusal,
+                        )
                 else:
                     raise AuthenticationFailedError(
                         f"Authentication Failed with status code {response.status}: "
