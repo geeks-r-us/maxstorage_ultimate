@@ -3,6 +3,7 @@ from datetime import timedelta
 import logging
 import re
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -23,11 +24,13 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
         hass: HomeAssistant,
         client: MaxStorageClient,
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
+        config_entry: ConfigEntry | None = None,
     ) -> None:
         """Initialize."""
         self.api = client
         super().__init__(
             hass=hass,
+            config_entry=config_entry,
             logger=_LOGGER,
             name=f"{DOMAIN}-{client.mac}-coordinator",
             update_interval=timedelta(seconds=scan_interval),
@@ -77,6 +80,23 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
         """Return the device registry identifier of the master."""
         return (DOMAIN, self.api.device_info["Ident"])
 
+    def _via_master(self) -> dict:
+        """Return the DeviceInfo fields that attach a device to the master.
+
+        Newer Home Assistant versions want the id of the master device
+        (`via_device_id`), older ones its identifier (`via_device`).
+        """
+        if "via_device_id" not in dr.DeviceInfo.__annotations__:
+            return {"via_device": self.master_identifier}
+        if self.config_entry is not None:
+            registry = dr.async_get(self.hass)
+            for device in dr.async_entries_for_config_entry(
+                registry, self.config_entry.entry_id
+            ):
+                if self.master_identifier in device.identifiers:
+                    return {"via_device_id": device.id}
+        return {}
+
     def worker_device_info(self, key: str) -> dr.DeviceInfo:
         """Return the device information of a swarm worker."""
         number = WORKER_KEY.match(key)[1]
@@ -85,7 +105,7 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
             manufacturer="SolarMax",
             model=str(self.workers.get(key, {}).get("deviceTyp") or "Max.Storage"),
             name=f"MaxStorageUltimate Worker {number}",
-            via_device=self.master_identifier,
+            **self._via_master(),
         )
 
     @property
@@ -96,6 +116,6 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
             manufacturer="SolarMax",
             model="Swarm",
             name="MaxStorageUltimate Swarm",
-            via_device=self.master_identifier,
+            **self._via_master(),
         )
 

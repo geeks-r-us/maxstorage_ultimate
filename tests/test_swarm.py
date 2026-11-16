@@ -36,9 +36,10 @@ def _state(hass, key):
     return hass.states.get(entity_id)
 
 
-async def test_devices_are_created(hass: HomeAssistant, real_client):
+async def test_devices_are_created(hass: HomeAssistant, real_client, caplog):
     entry = _entry()
     await _setup(hass, entry)
+    assert "via_device" not in caplog.text  # no deprecation warning
 
     devices = {
         next(iter(d.identifiers))[1]: d

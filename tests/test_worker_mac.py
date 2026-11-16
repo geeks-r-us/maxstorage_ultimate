@@ -13,7 +13,11 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
 
 from custom_components.maxstorage_ultimate.const import DOMAIN
-from custom_components.maxstorage_ultimate.swarm import match_worker, pick_ipv4
+from custom_components.maxstorage_ultimate.swarm import (
+    mac_from_eui64,
+    match_worker,
+    pick_ipv4,
+)
 
 from .test_init import _entry, _make_client, _setup
 
@@ -271,11 +275,98 @@ def _info_with(*addresses, host=None):
         (["2001:db8::60", "192.168.1.60"], "192.168.1.60"),  # IPv6 is the host
         (["fd00::60", "169.254.3.4", "192.168.1.60"], "192.168.1.60"),
         (["2001:db8::60", "169.254.3.4"], "169.254.3.4"),  # only link-local IPv4
-        (["2001:db8::60"], "2001:db8::60"),  # no IPv4 at all: fall back to the host
+        (["2001:db8::60"], None),  # no IPv4 at all
+        ([], None),
+        (["not-an-ip", "0.0.0.0"], None),
     ],
 )
 def test_pick_ipv4(addresses, expected):
-    assert pick_ipv4(_info_with(*addresses)) == expected
+    assert pick_ipv4(addresses) == expected
+
+
+@pytest.mark.parametrize(
+    ("address", "expected"),
+    [
+        # from a real worker: SLAAC address built from the MAC
+        ("2a02:8071:79d0:3df:219:1bff:fed1:9b9d", "00:19:1b:d1:9b:9d"),
+        ("fe80::219:1bff:fed1:9b9d", "00:19:1b:d1:9b:9d"),
+        ("2001:db8::60", None),  # no EUI-64 (e.g. privacy address)
+        ("192.168.1.60", None),
+        ("not-an-ip", None),
+    ],
+)
+def test_mac_from_eui64(address, expected):
+    assert mac_from_eui64(address) == expected
+
+
+async def _discover_with(hass, addresses, resolve=None):
+    """Zeroconf flow for a worker announced with the given addresses."""
+    from ipaddress import ip_address
+
+    parsed = [ip_address(a) for a in addresses]
+
+    def fake_dns(host):
+        if host == "maxstorage-w1.local":  # the discovered worker
+            if resolve:
+                return resolve
+            raise socket.gaierror
+        return host  # IPs of configured entries resolve to themselves
+
+    info = ZeroconfServiceInfo(
+        ip_address=parsed[0],
+        ip_addresses=parsed,
+        hostname="maxstorage-w1.local.",
+        name="Worker._maxstorage._tcp.local.",
+        port=80,
+        properties={},
+        type="_maxstorage._tcp.local.",
+    )
+    with (
+        patch("custom_components.maxstorage_ultimate.config_flow.MaxStorageClient") as cls,
+        patch(
+            "custom_components.maxstorage_ultimate.swarm.get_mac_address",
+            return_value=WORKER_MAC,
+        ) as arp,
+        patch("socket.gethostbyname", side_effect=fake_dns) as dns,
+    ):
+        client = MagicMock()
+        client.get_data = AsyncMock(return_value=WORKER)
+        client.close = AsyncMock()
+        cls.return_value = client
+        await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_ZEROCONF}, data=info
+        )
+    return arp, dns
+
+
+async def test_ipv6_only_worker_resolves_ipv4_via_hostname(hass: HomeAssistant):
+    entry = await _setup_master(hass, MASTER)
+
+    arp, dns = await _discover_with(hass, ["2a02:8071:79d0:3df::1"], resolve="192.168.1.60")
+
+    assert "maxstorage-w1.local" in [c.args[0] for c in dns.call_args_list]
+    arp.assert_called_once_with("192.168.1.60")
+    assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in _worker_device(hass, entry).connections
+
+
+async def test_ipv6_only_worker_mac_is_derived_from_the_address(hass: HomeAssistant):
+    """The case from a real setup: only an EUI-64 IPv6 address, name not resolvable."""
+    entry = await _setup_master(hass, MASTER)
+
+    arp, _ = await _discover_with(hass, ["2a02:8071:79d0:3df:219:1bff:fed1:9b9d"])
+
+    arp.assert_not_called()  # arp cannot handle IPv6
+    assert (dr.CONNECTION_NETWORK_MAC, "00:19:1b:d1:9b:9d") in _worker_device(hass, entry).connections
+
+
+async def test_ipv6_only_worker_without_eui64_is_left_alone(hass: HomeAssistant):
+    entry = await _setup_master(hass, MASTER)
+
+    await _discover_with(hass, ["2001:db8::60"])
+
+    assert not any(
+        c[0] == dr.CONNECTION_NETWORK_MAC for c in _worker_device(hass, entry).connections
+    )
 
 
 async def test_ipv6_host_still_uses_the_ipv4_for_the_mac(hass: HomeAssistant):
