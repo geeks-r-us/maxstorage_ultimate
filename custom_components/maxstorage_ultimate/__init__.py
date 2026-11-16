@@ -45,7 +45,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise
 
         coordinator = MaxStorageDataUpdateCoordinator(
-            hass, client, config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            hass,
+            client,
+            config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            entry,
         )
         hass.data[DOMAIN][entry.entry_id] = {
             "coordinator": coordinator,
