@@ -26,6 +26,7 @@ class WebInterface:
         self.answer = "1"  # answer of logincheck.php
         self.has_logincheck = True  # False: older firmware without the page
         self.overview_needs_login = True
+        self.legacy_accepts = True  # False: home.php answers with the login page
         self.empty_next = 0  # answer the next overview requests with nothing
         self.logins = []
         self.host = ""
@@ -41,6 +42,8 @@ class WebInterface:
         return response
 
     async def home(self, request):
+        if not self.legacy_accepts:
+            return web.Response(text="<html><form id='loginform'></form></html>")
         response = web.Response(text=HTML_340)
         if "PHPSESSID" not in request.cookies:
             response.set_cookie("PHPSESSID", "guest", path="/")
@@ -116,6 +119,7 @@ async def test_the_device_info_is_still_read(web_interface):
 )
 async def test_refused_login(web_interface, answer, message):
     web_interface.answer = answer
+    web_interface.legacy_accepts = False  # neither login works
     client = MaxStorageClient(web_interface.host, "user", "wrong")
     try:
         with pytest.raises(AuthenticationFailedError, match=message):
@@ -158,6 +162,7 @@ async def test_wrong_password_is_reported_as_such_by_the_config_flow(
     from homeassistant.data_entry_flow import FlowResultType
 
     web_interface.answer = "0"
+    web_interface.legacy_accepts = False
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -177,3 +182,32 @@ async def test_wrong_password_is_reported_as_such_by_the_config_flow(
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_auth"}
+
+
+@pytest.mark.parametrize("answer", ["0", "2", "3", "-30"])
+async def test_the_login_through_home_php_still_counts(web_interface, answer, caplog):
+    """A device that answers logincheck.php with 2 or 3 (new password / one-time
+    code wanted) can still be read through home.php, as before."""
+    web_interface.answer = answer
+    client = MaxStorageClient(web_interface.host, "user", "default")
+    try:
+        await client.authenticate()
+        await client.authenticate()  # the hint is logged once only
+        assert client.get_device_info()["Ident"] == "abc123"
+        assert client.is_token_valid()
+    finally:
+        await client.close()
+
+    assert caplog.text.count("The login through home.php works") == 1
+
+
+async def test_overview_stays_empty_without_the_full_login(web_interface):
+    web_interface.answer = "2"
+
+    client = MaxStorageClient(web_interface.host, "user", "default")
+    try:
+        result = await client.get_device_overview()
+    finally:
+        await client.close()
+
+    assert result == {"model": None, "dcdc": [], "batteries": []}
