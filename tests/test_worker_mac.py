@@ -25,6 +25,14 @@ FIXTURES = Path(__file__).parent / "fixtures"
 MASTER = json.loads((FIXTURES / "swarm_master.json").read_text())
 WORKER = json.loads((FIXTURES / "swarm_worker.json").read_text())
 WORKER_MAC = "aa:bb:cc:00:11:22"
+WORKER_OVERVIEW = {"model": "12SMT Island (2)", "dcdc": [], "batteries": []}
+WORKER_INFO = {
+    "Ident": "maxstorage-w1",
+    "Firmware-Version": "3.4.5",
+    "Hardware-Version": "MCv2.5 Serie",
+    "MasterController-Nummer": "98765",
+    "Anlagenname": "Home",
+}
 
 
 def _info() -> ZeroconfServiceInfo:
@@ -63,7 +71,7 @@ def _make_client_with(data):
     return client
 
 
-async def _discover(hass, mac=WORKER_MAC, worker=WORKER):
+async def _discover(hass, mac=WORKER_MAC, worker=WORKER, info=WORKER_INFO):
     """Run a zeroconf flow for a worker; return (result, probe client class)."""
     with (
         patch("custom_components.maxstorage_ultimate.config_flow.MaxStorageClient") as cls,
@@ -75,6 +83,8 @@ async def _discover(hass, mac=WORKER_MAC, worker=WORKER):
     ):
         client = MagicMock()
         client.get_data = AsyncMock(return_value=worker)
+        client.get_device_info = MagicMock(return_value=info)
+        client.get_device_overview = AsyncMock(return_value=WORKER_OVERVIEW)
         client.close = AsyncMock()
         cls.return_value = client
         result = await hass.config_entries.flow.async_init(
@@ -331,6 +341,8 @@ async def _discover_with(hass, addresses, resolve=None):
     ):
         client = MagicMock()
         client.get_data = AsyncMock(return_value=WORKER)
+        client.get_device_info = MagicMock(return_value=WORKER_INFO)
+        client.get_device_overview = AsyncMock(return_value=WORKER_OVERVIEW)
         client.close = AsyncMock()
         cls.return_value = client
         await hass.config_entries.flow.async_init(
@@ -383,6 +395,8 @@ async def test_ipv6_host_still_uses_the_ipv4_for_the_mac(hass: HomeAssistant):
     ):
         client = MagicMock()
         client.get_data = AsyncMock(return_value=WORKER)
+        client.get_device_info = MagicMock(return_value=WORKER_INFO)
+        client.get_device_overview = AsyncMock(return_value=WORKER_OVERVIEW)
         client.close = AsyncMock()
         cls.return_value = client
         await hass.config_entries.flow.async_init(
@@ -391,3 +405,105 @@ async def test_ipv6_host_still_uses_the_ipv4_for_the_mac(hass: HomeAssistant):
 
     lookup.assert_called_once_with("192.168.1.60")
     assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in _worker_device(hass, entry).connections
+
+
+async def test_worker_details_are_added(hass: HomeAssistant):
+    entry = await _setup_master(hass, MASTER)
+
+    await _discover(hass)
+
+    device = _worker_device(hass, entry)
+    assert device.sw_version == "3.4.5"
+    assert device.hw_version == "MCv2.5 Serie"
+    assert device.serial_number == "98765"
+
+
+async def test_worker_details_are_added_even_without_mac(hass: HomeAssistant):
+    entry = await _setup_master(hass, MASTER)
+
+    await _discover(hass, mac=None)
+
+    device = _worker_device(hass, entry)
+    assert device.sw_version == "3.4.5"
+    assert device.serial_number == "98765"
+    assert not any(c[0] == dr.CONNECTION_NETWORK_MAC for c in device.connections)
+    assert (DOMAIN, "maxstorage-w1") not in device.identifiers  # still retried
+
+
+async def test_details_are_added_to_an_already_attributed_worker(hass: HomeAssistant):
+    """Workers attributed by an earlier version only have the MAC and hostname."""
+    entry = await _setup_master(hass, MASTER)
+    await _discover(hass, info={})  # no details on the page
+    device = _worker_device(hass, entry)
+    assert device.sw_version is None
+    assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in device.connections
+
+    result, cls = await _discover(hass)  # not complete yet, so queried again
+
+    cls.assert_called_once()
+    assert result["reason"] == "swarm_worker"
+    device = _worker_device(hass, entry)
+    assert device.sw_version == "3.4.5"
+    assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in device.connections
+
+    _, cls = await _discover(hass)  # complete now
+    cls.assert_not_called()
+
+
+async def test_details_survive_a_reload_of_the_master(hass: HomeAssistant):
+    entry = await _setup_master(hass, MASTER)
+    await _discover(hass)
+
+    with patch("custom_components.maxstorage_ultimate.MaxStorageClient") as cls:
+        cls.side_effect = lambda *a, **k: _make_client_with(MASTER)
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+
+    device = _worker_device(hass, entry)
+    assert device.sw_version == "3.4.5"
+    assert device.hw_version == "MCv2.5 Serie"
+    assert device.serial_number == "98765"
+
+
+async def test_worker_gets_the_full_model_name(hass: HomeAssistant):
+    entry = await _setup_master(hass, MASTER)
+
+    await _discover(hass)
+
+    assert _worker_device(hass, entry).model == "12SMT Island (2)"
+
+
+async def test_worker_model_survives_a_reload(hass: HomeAssistant):
+    """The device type of the measurements ("mc2") must not replace it again."""
+    entry = await _setup_master(hass, MASTER)
+    await _discover(hass)
+
+    with patch("custom_components.maxstorage_ultimate.MaxStorageClient") as cls:
+        cls.side_effect = lambda *a, **k: _make_client_with(MASTER)
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert _worker_device(hass, entry).model == "12SMT Island (2)"
+
+
+async def test_worker_without_overview_keeps_the_device_type(hass: HomeAssistant):
+    entry = await _setup_master(hass, MASTER)
+    assert _worker_device(hass, entry).model == "mc2"
+
+    with patch("custom_components.maxstorage_ultimate.config_flow.MaxStorageClient") as cls, patch(
+        "custom_components.maxstorage_ultimate.swarm.get_mac_address", return_value=WORKER_MAC
+    ), patch("socket.gethostbyname", side_effect=lambda h: h):
+        client = MagicMock()
+        client.get_data = AsyncMock(return_value=WORKER)
+        client.get_device_info = MagicMock(return_value=WORKER_INFO)
+        client.get_device_overview = AsyncMock(side_effect=Exception("no such page"))
+        client.close = AsyncMock()
+        cls.return_value = client
+        await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_ZEROCONF}, data=_info()
+        )
+
+    device = _worker_device(hass, entry)
+    assert device.model == "mc2"
+    assert device.sw_version == "3.4.5"  # the rest still works
+    assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in device.connections

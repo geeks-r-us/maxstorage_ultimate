@@ -24,6 +24,8 @@ TO_REDACT_CONFIG = {
 # The weather block contains the plant's location (coordinates, city name).
 TO_REDACT_DATA = {"WeatherData"}
 TO_REDACT_DEVICE = {"Ident", "MasterController-Nummer", "Anlagenname", "mac"}
+# Serial numbers of the DC/DC converters and batteries in the device overview
+TO_REDACT_OVERVIEW = {"serial"}
 
 
 async def async_get_config_entry_diagnostics(
@@ -50,5 +52,8 @@ async def async_get_config_entry_diagnostics(
         ),
         "update_interval_seconds": coordinator.update_interval.total_seconds(),
         "last_update_success": coordinator.last_update_success,
+        "overview": async_redact_data(
+            (runtime["overview"].data or {}), TO_REDACT_OVERVIEW
+        ),
         "data": async_redact_data(coordinator.data, TO_REDACT_DATA),
     }

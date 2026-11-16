@@ -82,19 +82,30 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
 
         return None
 
-    async def _async_probe(self) -> Any:
+    async def _async_probe(self) -> tuple[Any, dict[str, Any], dict[str, Any] | None]:
         """Query a discovered device with the default credentials.
 
         Only the publicly documented default credentials are sent, never the
-        ones of an existing entry. Returns the response, or None if the device
-        could not be queried (unknown role).
+        ones of an existing entry. Returns the response, the device information
+        (firmware, hardware, serial number) and the device overview (model name);
+        (None, {}, None) if the device could not be queried (unknown role).
         """
         client = MaxStorageClient(self._host, DEFAULT_USER, DEFAULT_PASSWORD)
         try:
             async with asyncio.timeout(PROBE_TIMEOUT):
-                return await client.get_data()
+                data = await client.get_data()
+                info = client.get_device_info()
+                try:
+                    overview = await client.get_device_overview()
+                except Exception:  # pylint: disable=broad-except
+                    overview = None  # not available on every firmware
+            return (
+                data,
+                info if isinstance(info, dict) else {},
+                overview if isinstance(overview, dict) else None,
+            )
         except Exception:  # pylint: disable=broad-except
-            return None
+            return None, {}, None
         finally:
             await client.close()
 
@@ -183,7 +194,7 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
         # Instead, use the discovery to add their MAC address to the worker device.
         if uuid and is_known_worker(self.hass, uuid):
             return self.async_abort(reason=ERROR_SWARM_WORKER)
-        data = await self._async_probe()
+        data, device_info, overview = await self._async_probe()
         if is_swarm_worker(data):
             if uuid:
                 await async_attribute_worker(
@@ -192,6 +203,8 @@ class MaxStorageFlowHandler(ConfigFlow, domain=DOMAIN):
                     uuid,
                     [*discovery_info.addresses, discovery_info.host],
                     discovery_info.hostname,
+                    device_info,
+                    (overview or {}).get("model"),
                 )
             return self.async_abort(reason=ERROR_SWARM_WORKER)
         _LOGGER.debug(

@@ -49,6 +49,9 @@ def _make_client() -> MagicMock:
     client.setup = AsyncMock()
     client.close = AsyncMock()
     client.get_data = AsyncMock(return_value=DATA)
+    client.get_device_overview = AsyncMock(
+        return_value={"model": None, "dcdc": [], "batteries": []}
+    )
     client.mac = "aa:bb:cc:dd:ee:ff"
     client.device_info = {
         "Ident": "abc123",

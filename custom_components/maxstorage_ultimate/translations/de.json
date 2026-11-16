@@ -81,6 +81,12 @@
       },
       "grid_export_energy": {
         "name": "Netzeinspeisung Energie"
+      },
+      "dcdc_state": {
+        "name": "DC/DC-Wandler {index} Zustand"
+      },
+      "battery_state": {
+        "name": "Batterie {index} Zustand"
       }
     }
   },

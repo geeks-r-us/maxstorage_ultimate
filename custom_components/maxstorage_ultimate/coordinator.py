@@ -15,6 +15,10 @@ _LOGGER = logging.getLogger(__name__)
 
 WORKER_KEY = re.compile(r"^worker(\d+)$")
 
+# Used until the model name could be read from the device overview.
+FALLBACK_MODEL = "15SMT Island(1)"
+OVERVIEW_INTERVAL = timedelta(minutes=5)
+
 
 class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
@@ -28,6 +32,7 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Initialize."""
         self.api = client
+        self.model: str | None = None  # read from the device overview
         super().__init__(
             hass=hass,
             config_entry=config_entry,
@@ -52,7 +57,7 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
             configuration_url=f"http://{self.api.device_info['Ident']}.local",
             identifiers={(DOMAIN, self.api.device_info["Ident"])},
             manufacturer="SolarMax",
-            model="15SMT Island(1)",  # get model from device_overview
+            model=self.model or FALLBACK_MODEL,
             name="MaxStorageUltimate",  # get name from device_overview
             serial_number=self.api.device_info["MasterController-Nummer"],
             sw_version=self.api.device_info["Firmware-Version"],
@@ -100,13 +105,30 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
     def worker_device_info(self, key: str) -> dr.DeviceInfo:
         """Return the device information of a swarm worker."""
         number = WORKER_KEY.match(key)[1]
-        return dr.DeviceInfo(
-            identifiers={(DOMAIN, f"{self.api.device_info['Ident']}_{key}")},
+        identifier = (DOMAIN, f"{self.api.device_info['Ident']}_{key}")
+        info = dr.DeviceInfo(
+            identifiers={identifier},
             manufacturer="SolarMax",
-            model=str(self.workers.get(key, {}).get("deviceTyp") or "Max.Storage"),
             name=f"MaxStorageUltimate Worker {number}",
             **self._via_master(),
         )
+        # The full model name is set when the worker is discovered; do not
+        # overwrite it with the device type of the measurements.
+        if not self._worker_model(identifier):
+            info["model"] = str(self.workers.get(key, {}).get("deviceTyp") or "Max.Storage")
+        return info
+
+    def _worker_model(self, identifier: tuple[str, str]) -> str | None:
+        """Return the model name already stored for the worker device."""
+        if self.config_entry is None:
+            return None
+        registry = dr.async_get(self.hass)
+        for device in dr.async_entries_for_config_entry(
+            registry, self.config_entry.entry_id
+        ):
+            if identifier in device.identifiers:
+                return device.model if device.model not in (None, "mc2") else None
+        return None
 
     @property
     def swarm_device_info(self) -> dr.DeviceInfo:
@@ -118,4 +140,38 @@ class MaxStorageDataUpdateCoordinator(DataUpdateCoordinator):
             name="MaxStorageUltimate Swarm",
             **self._via_master(),
         )
+
+
+class MaxStorageOverviewCoordinator(DataUpdateCoordinator):
+    """Reads the device overview (model, DC/DC converters, batteries).
+
+    These values change rarely, so they are read less often than the live data.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: MaxStorageClient,
+        config_entry: ConfigEntry | None = None,
+    ) -> None:
+        """Initialize."""
+        self.api = client
+        super().__init__(
+            hass=hass,
+            config_entry=config_entry,
+            logger=_LOGGER,
+            name=f"{DOMAIN}-overview-coordinator",
+            update_interval=OVERVIEW_INTERVAL,
+        )
+
+    async def _async_update_data(self) -> dict:
+        """Fetch the device overview."""
+        try:
+            return await self.api.get_device_overview()
+        except Exception as e:
+            raise UpdateFailed(f"Error reading the device overview: {e}") from e
+
+    def components(self, kind: str) -> dict[int, dict]:
+        """Return the DC/DC converters ("dcdc") or batteries ("batteries") by index."""
+        return {c["index"]: c for c in (self.data or {}).get(kind, [])}
 

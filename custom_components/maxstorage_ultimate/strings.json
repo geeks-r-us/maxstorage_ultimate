@@ -83,6 +83,12 @@
       },
       "grid_export_energy": {
         "name": "Grid Export Energy"
+      },
+      "dcdc_state": {
+        "name": "DC/DC converter {index} state"
+      },
+      "battery_state": {
+        "name": "Battery {index} state"
       }
     }
   },
