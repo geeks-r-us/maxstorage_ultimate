@@ -221,3 +221,23 @@ async def test_worker_without_configured_master_is_just_dropped(hass: HomeAssist
 )
 def test_match_worker(candidates, worker, expected):
     assert match_worker(candidates, worker) == expected
+
+
+async def test_mac_of_another_integration_is_linked(hass: HomeAssistant):
+    """UniFi (or any other integration) having the MAC is the wanted case."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = await _setup_master(hass, MASTER)
+    unifi = MockConfigEntry(domain="unifi")
+    unifi.add_to_hass(hass)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=unifi.entry_id,
+        connections={(dr.CONNECTION_NETWORK_MAC, WORKER_MAC)},
+        name="Inverter worker",
+    )
+
+    await _discover(hass)
+
+    device = _worker_device(hass, entry)
+    assert (dr.CONNECTION_NETWORK_MAC, WORKER_MAC) in device.connections
+    assert (DOMAIN, "maxstorage-w1") in device.identifiers

@@ -113,18 +113,24 @@ async def async_attribute_worker(
         if not mac:
             _LOGGER.debug("No MAC address for discovered worker %s (%s)", ident, ip)
             return False
-        mac = dr.format_mac(mac)
+        connection = (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
+        device = by_identifier[f"{master}_{key}"]
+        # Home Assistant only rejects a connection that two devices of the *same*
+        # integration share (e.g. a routed host answering with the router's MAC,
+        # which is also the master's). The same MAC on a device of another
+        # integration (e.g. UniFi) is how devices are linked, so it is wanted.
         if any(
-            (dr.CONNECTION_NETWORK_MAC, mac) in other.connections
-            for other in registry.devices.values()
+            connection in other.connections
+            for other in _entry_devices(hass, entry_id)
+            if other.id != device.id
         ):
             _LOGGER.debug("MAC %s of worker %s is already used, skipping", mac, ident)
             return False
 
         registry.async_update_device(
-            by_identifier[f"{master}_{key}"].id,
-            merge_connections={(dr.CONNECTION_NETWORK_MAC, mac)},
-            merge_identifiers={(DOMAIN, ident)},
+            device.id,
+            new_connections=device.connections | {connection},
+            new_identifiers=device.identifiers | {(DOMAIN, ident)},
         )
         _LOGGER.debug("Attributed discovered worker %s to %s (%s)", ident, key, mac)
         return True
