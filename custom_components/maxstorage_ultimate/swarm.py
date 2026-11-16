@@ -142,11 +142,40 @@ def _entry_devices(hass: HomeAssistant, entry_id: str) -> list[dr.DeviceEntry]:
     return dr.async_entries_for_config_entry(dr.async_get(hass), entry_id)
 
 
+# Fields of the device page (home.php) and the device registry arguments they fill,
+# the same mapping as for the master (see coordinator.device_info).
+_DEVICE_DETAILS = {
+    "sw_version": "Firmware-Version",
+    "hw_version": "Hardware-Version",
+    "serial_number": "MasterController-Nummer",
+}
+
+
+def _device_details(device_info: dict[str, Any] | None) -> dict[str, str]:
+    """Return the device registry arguments for firmware, hardware and serial."""
+    if not isinstance(device_info, dict):
+        return {}
+    return {
+        argument: str(value)
+        for argument, key in _DEVICE_DETAILS.items()
+        if (value := device_info.get(key))
+    }
+
+
 def is_known_worker(hass: HomeAssistant, ident: str) -> bool:
-    """Return True if a worker with this hostname was already attributed."""
+    """Return True if a worker with this hostname is complete.
+
+    Complete means: attributed (hostname and MAC), its firmware version and its
+    full model name (not just the device type "mc2") are known. Otherwise it is
+    queried again on its next announcement.
+    """
     for entry_id in hass.data.get(DOMAIN, {}):
         for device in _entry_devices(hass, entry_id):
-            if (DOMAIN, ident) in device.identifiers:
+            if (
+                (DOMAIN, ident) in device.identifiers
+                and device.sw_version
+                and device.model not in (None, "mc2")
+            ):
                 return True
     return False
 
@@ -157,9 +186,19 @@ async def async_attribute_worker(
     ident: str,
     addresses: list[Any],
     hostname: str | None = None,
+    device_info: dict[str, Any] | None = None,
+    model: str | None = None,
 ) -> bool:
-    """Add MAC address and hostname to the worker device that matches worker_data."""
+    """Complete the device of a discovered worker.
+
+    Adds firmware, hardware version, serial number and model name from the
+    worker's device pages, and the MAC address and hostname. The worker is recognised by its
+    hostname if it was attributed before, otherwise by its measurements.
+    """
     registry = dr.async_get(hass)
+    details = _device_details(device_info)
+    if model:
+        details["model"] = model
     _LOGGER.debug(
         "Discovered worker %s (%s): looking for a match among %d configured entries",
         ident,
@@ -176,12 +215,19 @@ async def async_attribute_worker(
             if domain == DOMAIN
         }
 
+        device = by_identifier.get(ident)
+        if device is not None:  # attributed before, only the details are missing
+            if details:
+                registry.async_update_device(device.id, **details)
+                _LOGGER.debug("Updated details of worker %s: %s", ident, details)
+            return True
+
         candidates: dict[str, dict[str, Any]] = {}
         for key, block in coordinator.workers.items():
-            device = by_identifier.get(f"{master}_{key}")
-            if device is None:
+            candidate = by_identifier.get(f"{master}_{key}")
+            if candidate is None:
                 continue
-            attributed = [i for d, i in device.identifiers if d == DOMAIN]
+            attributed = [i for d, i in candidate.identifiers if d == DOMAIN]
             if len(attributed) > 1:  # already has a hostname identifier
                 continue
             candidates[key] = block
@@ -197,6 +243,11 @@ async def async_attribute_worker(
             )
             continue
 
+        device = by_identifier[f"{master}_{key}"]
+        if details:
+            registry.async_update_device(device.id, **details)
+            _LOGGER.debug("Set details of %s: %s", key, details)
+
         mac = await async_lookup_mac(hass, addresses, hostname)
         if not mac:
             _LOGGER.debug(
@@ -204,7 +255,6 @@ async def async_attribute_worker(
             )
             return False
         connection = (dr.CONNECTION_NETWORK_MAC, dr.format_mac(mac))
-        device = by_identifier[f"{master}_{key}"]
         # A MAC shared with another device of *this* integration is rejected (e.g.
         # a routed host answering with the router's MAC, which is also the
         # master's). The same MAC on a device of another integration (e.g. UniFi)
